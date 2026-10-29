@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ottovolante</title>
+<link rel="stylesheet" href="ottovolante.css?v=1">
+</head>
+<body>
+<header id="testa">
+  <div class="marchio">Ottovolante</div>
+  <div class="scelta">
+    <button id="btnFunz" class="biro" aria-haspopup="true"></button>
+    <div id="menuFunz" hidden></div>
+  </div>
+  <nav id="giri" aria-label="Giri">
+    <button data-giro="dominio">dominio</button>
+    <button data-giro="segno">segno</button>
+    <button data-giro="limiti">limiti</button>
+    <button data-giro="derivata">derivata</button>
+    <button data-giro="concavita">concavità</button>
+  </nav>
+</header>
+<main id="scena"><canvas id="tela"></canvas></main>
+<footer id="piede">
+  <button id="btnPlay" class="tondo" title="Avanti (spazio)">▶</button>
+  <button id="btnNext" title="Al prossimo punto notevole (freccia destra)">⏭ prossimo punto</button>
+  <div id="vel" class="gruppo" aria-label="Velocità">
+    <button data-v="0.6">lenta</button><button data-v="1">normale</button><button data-v="1.8">veloce</button>
+  </div>
+  <label class="interr"><input type="checkbox" id="chkPausa" checked><span>pausa ai punti notevoli</span></label>
+  <span class="spazio"></span>
+  <button id="btnRifai">↺ rifai il giro</button>
+  <button id="btnPulita">pagina pulita</button>
+</footer>
+<script src="ov-penna.js?v=1"></script>
+<script src="ov-funzioni.js?v=1"></script>
+<script src="ov-giri.js?v=1"></script>
+<script src="ottovolante.js?v=1"></script>
+</body>
+</html>
