@@ -23,6 +23,17 @@ function Di(chi, testo, ferma, dur) {
   return { ferma: !!ferma, esegui: function () { fumetto(chi, testo, dur || (ferma ? 5 : 3.6)); return true; } };
 }
 function Fai(fn) { return { esegui: function (g) { fn(g); return true; } }; }
+/** Il giro intorno al muro: l'omino si allontana dentro il foglio (più piccolo e un po' più in alto),
+ *  passa dietro il muro e torna avanti dall'altra parte. */
+function Aggira(xTo) {
+  return Tween(2.6, function (g, p) { p.x = g.W.x; }, function (g, u, p) {
+    var a = Math.min(1, u / 0.3), c = Math.max(0, (u - 0.7) / 0.3);
+    g.W.dietro = a * (1 - c);
+    g.W.x = lerp(p.x, xTo, Math.max(0, Math.min(1, (u - 0.25) / 0.5)));
+    g.W.passi += 2.2;
+    if (u >= 1) g.W.dietro = 0;
+  });
+}
 function Attendi(s) { var p = { t: 0 }; p.esegui = function (g, k) { p.t += k; return p.t >= s; }; return p; }
 function Tween(dur, inizio, fn) {
   var p = { t: -1 };
@@ -125,7 +136,7 @@ function posizione() {
   var W = this.W;
   if (W.hop === 'nascosto') return null;
   if (W.hop) return W.hop;
-  var ys = Y(this.modo === 'asse' ? 0 : W.y);
+  var ys = Y(this.modo === 'asse' ? 0 : W.y) - (W.dietro || 0) * 26;
   return fuoriY(ys) ? null : [X(W.x), ys];
 }
 function ancora(chi) {
@@ -218,7 +229,7 @@ COSTRUTTORI.dominio = function (g, F) {
   g.W.x = A;
   function pianta(px, testo, lato) { return Fai(function () { S.cartelli.push({ x: px, testo: testo, lato: lato, t0: CLOCK }); }); }
   // l'omino si ferma sempre fuori dalla tavola del cartello, così non la copre mentre ne parla
-  function largo(testo) { return (larghezzaTavola(testo) + 26) / sx; }
+  function largo(testo) { return (larghezzaTavola(testo) + 44) / sx; }
   ints.forEach(function (iv, n) {
     var t;
     if (iv.a > x + 1e-9) {
@@ -253,8 +264,14 @@ COSTRUTTORI.dominio = function (g, F) {
       P.push(Di('W', esc && esc.tipo === 'asintoto'
         ? 'Un muro! In x = ' + t + ' c’è un asintoto: qui la funzione non esiste'
         : 'Un buco! In x = ' + t + ' la funzione non esiste', true));
-      P.push(Salta(iv.b + largo('(' + t)), pianta(iv.b, '(' + t, 1));
-      P.push(Di('W', 'Lo aggiro, pianto un altro cartello e riparto!'));
+      if (esc && esc.tipo === 'asintoto') {
+        P.push(Di('W', 'È un muro infinito, in alto e in basso: non si scavalca! Ci giro intorno passandoci dietro…', false, 4.5));
+        P.push(Attendi(1.2), Aggira(iv.b + largo('(' + t)), pianta(iv.b, '(' + t, 1));
+        P.push(Di('W', 'Eccomi dall’altra parte! Pianto un altro cartello e riparto'));
+      } else {
+        P.push(Salta(iv.b + largo('(' + t)), pianta(iv.b, '(' + t, 1));
+        P.push(Di('W', 'Lo salto, pianto un altro cartello e riparto!'));
+      }
       x = iv.b + largo('(' + t);
     } else {
       P.push(Cammina(iv.b - largo(t + ')')), pianta(iv.b, t + (iv.bIn ? ']' : ')'), -1));
@@ -307,6 +324,8 @@ COSTRUTTORI.segno = function (g, F) {
 function moto(s) { return s > 0 ? 'salgo: f′(x) > 0, f crescente' : s < 0 ? 'scendo: f′(x) < 0, f decrescente' : 'sono in piano'; }
 COSTRUTTORI.derivata = function (g, F) {
   var P = g.passi, x0 = partenza(g, F);
+  g.bers = pianoBersaglio(g, F, x0);
+  if (g.bers) g.B = g.bers.x;
   function dopo(x) { return segnoDi(F.d1(x + 1e-6)); }
   if (cerca(F.nonDer, x0)) P.push(Di('W', 'Parto in verticale: in x = ' + etichetta(F, x0) + ' la derivata non esiste. Poi ' + moto(dopo(x0)), true));
   else P.push(Di('W', 'Tengo la lancia parallela alla tangente: mi dice la pendenza. Ora ' + moto(dopo(x0))));
@@ -326,7 +345,9 @@ COSTRUTTORI.derivata = function (g, F) {
       P.push(Cammina(e.x), Di('W', 'Qui la derivata non esiste', true));
     }
   });
-  P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa! Crescenza e decrescenza sono nella tabella', true));
+  if (g.bers) P.push(Cammina(g.B), Fai(function (g) { g.bers.colpito = CLOCK; }), Fai(fine),
+                     Di('W', 'Centro! Fine corsa: crescenza e decrescenza sono nella tabella', true));
+  else P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa! Crescenza e decrescenza sono nella tabella', true));
 };
 
 // ── I limiti: due amici, uno da sinistra e uno da destra, gridano la loro quota ──
@@ -519,6 +540,55 @@ function carrello(xs, ys, ang, conAsta, conTrivella) {
   linea(-21, -19, 21, -19, { lw: 1, passate: 1 });
   ellisse(-11, -5, 5, 5, { lw: 1.6 }); ellisse(11, -5, 5, 5, { lw: 1.6 });
   ctx.restore();
+}
+
+/** Dove arriva la punta della lancia se il carrello sta in x. */
+function puntaLancia(F, x) {
+  var y = F.f(x), px = X(x), py = Y(y);
+  if (!isFinite(py)) return null;
+  var an = Math.atan2(-pendenza(F, x) * sy, sx), c = Math.cos(an), s = Math.sin(an), k = OMINO;
+  return { p: [px, py], t: [px + c * 116 * k + s * 27 * k, py + s * 116 * k - c * 27 * k], an: an };
+}
+/** Il bersaglio sta alla fine della corsa: il carrello si ferma dove la punta della lancia lo centra,
+ *  con carrello e bersaglio tutti e due dentro il quaderno. */
+function pianoBersaglio(g, F, x0) {
+  var A = Math.max(x0, g.A), x = g.B, passo = (g.B - A) / 400;
+  for (var i = 0; i <= 400; i++, x -= passo) {
+    var r = ramoDi(F, x);
+    if (r < 0 || r !== ramoDi(F, g.B)) continue;
+    var q = puntaLancia(F, x);
+    if (!q) continue;
+    var t = q.t, p = q.p;
+    if (t[0] < Gx1 - 28 && t[0] > Gx0 + 30 && t[1] > Gy0 + 30 && t[1] < Gy1 - 60 && p[1] > Gy0 + 70 && p[1] < Gy1 - 10)
+      return { x: x };
+  }
+  return null;
+}
+function bersaglio(b, F) {
+  var q = puntaLancia(F, b.x);                        // in pixel: si ricalcola, la vista può cambiare
+  if (!q) return;
+  var c = b.c = q.t, t = b.colpito ? CLOCK - b.colpito : -1, w = t >= 0 ? Math.sin(t * 22) * Math.exp(-t * 4) * 0.25 : 0;
+  ctx.save();
+  ctx.translate(c[0], c[1]);
+  seme(90);
+  tratto([[0, 4], [0, Gy1 - c[1] > 70 ? 62 : 30]], { col: '#8a5a2b', lw: 3, amp: 0.4 });
+  tratto([[-12, Gy1 - c[1] > 70 ? 62 : 30], [12, Gy1 - c[1] > 70 ? 62 : 30]], { col: '#8a5a2b', lw: 2.4, amp: 0.4 });
+  ctx.rotate(w);
+  ctx.scale(0.55, 1);                                  // visto di tre quarti
+  [[26, 'rgba(196, 33, 43, 0.8)'], [19, '#fffdf6'], [12, 'rgba(196, 33, 43, 0.8)'], [5, '#fffdf6']].forEach(function (a) {
+    ctx.fillStyle = a[1]; ctx.beginPath(); ctx.arc(0, 0, a[0], 0, 7); ctx.fill();
+  });
+  ellisse(0, 0, 26, 26, { col: '#3c3c48', lw: 1.6, fisso: true, amp: 0.4 });
+  ellisse(0, 0, 12, 12, { col: '#3c3c48', lw: 1.1, fisso: true, amp: 0.3, passate: 1 });
+  ctx.restore();
+  if (t >= 0 && t < 1.6) {                             // il colpo: stelline che si allargano e svaniscono
+    ctx.save(); ctx.globalAlpha = Math.max(0, 1 - t / 1.6);
+    for (var i = 0; i < 6; i++) {
+      var a = i / 6 * Math.PI * 2 + 0.3, r = 22 + t * 45;
+      stellina(c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r, 5, i % 2 ? ROSSO : '#e0a000');
+    }
+    ctx.restore();
+  }
 }
 
 /** La lancia da torneo: impugnatura dietro la mano, rondella a cono che para la mano, asta a strisce
@@ -887,11 +957,18 @@ function disegnaAttori() {
   var p = g.pos();
   if (!p) return;
   if (g.modo === 'asse') {
-    omino(p[0], p[1] - 1, { posa: g.W.hop ? 'fermo' : g.W.posa, fase: g.W.passi / 9 });
+    var d = g.W.dietro || 0;
+    if (d > 0) {                                      // dietro il foglio: un'ombra a terra, l'omino rimpicciolito
+      ctx.save(); ctx.globalAlpha = 0.25 * d; ctx.fillStyle = '#444';
+      ctx.beginPath(); ctx.ellipse(p[0], p[1] + 1, 14 * (1 - 0.3 * d), 3, 0, 0, 7); ctx.fill(); ctx.restore();
+    }
+    omino(p[0], p[1] - 1, { posa: g.W.hop ? 'fermo' : d > 0 ? 'cammina' : g.W.posa, fase: g.W.passi / 9, scala: 1 - 0.38 * d });
+    if (d > 0) F.esclusi.forEach(function (e, i) { if (e.tipo === 'asintoto') muro(X(e.x), 2200 + i); });   // il muro gli passa davanti
     return;
   }
 
   var ang = g.W.hop ? 0 : Math.atan2(-pendenza(F, g.W.x) * sy, sx);
+  if (g.id === 'derivata' && g.bers) bersaglio(g.bers, F);
   carrello(p[0], p[1], ang, g.id === 'derivata' && !g.W.hop, g.id === 'segno' && !g.W.hop && g.W.y < 0);
   if (g.id === 'derivata' && !g.W.hop) {
     var m = pendenza(F, g.W.x);
@@ -936,6 +1013,42 @@ function disegnaSfondo() {
   });
 }
 
+// ── Gli asintoti verticali sono muri: mattoni dal fondo alla cima del quaderno, e oltre ──
+var MURO_L = 9;                                       // mezza larghezza, in unità
+function muroVisibile(F, e) {
+  var id = S.giro && S.giro.id;
+  if (id === 'limiti' || id === 'derivata' || id === 'concavita') return true;
+  return e.x <= Math.max(S.prog.dominio, S.prog.segno) || S.fatto.dominio || S.fatto.segno;
+}
+function eMuro(F, x) { return F.esclusi.some(function (e) { return e.tipo === 'asintoto' && Math.abs(e.x - x) < 1e-9; }); }
+function muro(cx, sm) {
+  var y0 = Gy0 - 4, y1 = Gy1 + 4, L = MURO_L, h = 11, r, x;
+  if (cx < Gx0 - L || cx > Gx1 + L) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';      // il muro è pieno: copre quello che c'è dietro
+  ctx.fillStyle = '#e8c2a6'; ctx.fillRect(cx - L, y0, 2 * L, y1 - y0);
+  ctx.fillStyle = 'rgba(160, 70, 40, 0.18)';
+  for (r = 0, x = y0; x < y1; x += h, r++) {          // mattoni sfalsati, uno sì e uno no un po' più scuri
+    var off = r % 2 ? L : 0;
+    for (var bx = cx - L - off; bx < cx + L; bx += 2 * L) if ((r + Math.round(bx)) % 3 === 0) ctx.fillRect(Math.max(cx - L, bx), x, Math.min(2 * L, cx + L - Math.max(cx - L, bx)), h);
+  }
+  ctx.strokeStyle = 'rgba(120, 60, 35, 0.75)'; ctx.lineWidth = 0.9;
+  ctx.beginPath();
+  for (r = 0, x = y0; x < y1; x += h, r++) {
+    ctx.moveTo(cx - L, x); ctx.lineTo(cx + L, x);
+    var v = r % 2 ? cx : cx - L + 0.01;
+    if (r % 2) { ctx.moveTo(v, x); ctx.lineTo(v, x + h); }
+  }
+  ctx.stroke();
+  ctx.restore();
+  seme(sm);
+  tratto([[cx - L, y0], [cx - L, y1]], { col: '#7a3b22', lw: 1.6, passo: 40, amp: 0.4 });
+  tratto([[cx + L, y0], [cx + L, y1]], { col: '#7a3b22', lw: 1.6, passo: 40, amp: 0.4 });
+  // le frecce: il muro continua all'infinito, in su e in giù
+  tratto([[cx - L - 4, Gy0 + 16], [cx, Gy0 + 2], [cx + L + 4, Gy0 + 16]], { col: ROSSO, lw: 2, passo: 6 });
+  tratto([[cx - L - 4, Gy1 - 16], [cx, Gy1 - 2], [cx + L + 4, Gy1 - 16]], { col: ROSSO, lw: 2, passo: 6 });
+}
+
 // ── Segni che restano sul quaderno ──
 function fuoriDominio(F) {
   var g = [], ints = F.dominio.slice().sort(function (p, q) { return p.a - q.a; });
@@ -959,9 +1072,10 @@ function segniSotto() {
     if (q) tratteggio(q, { col: MATITA, sp: 9, alpha: 0.42, ang: 0.85 });
   });
   F.esclusi.forEach(function (e, i) {
-    if (e.x > pD) return;
+    if (!muroVisibile(F, e)) return;
     seme(2200 + i);
-    linea(X(e.x), Gy0, X(e.x), Gy1, { col: ROSSO, lw: 1.3, passate: 1, dash: [9, 7], amp: 0.4, passo: 40 });
+    if (e.tipo === 'asintoto') muro(X(e.x), 2200 + i);
+    else linea(X(e.x), Gy0, X(e.x), Gy1, { col: ROSSO, lw: 1.3, passate: 1, dash: [9, 7], amp: 0.4, passo: 40 });
   });
   S.orizz.forEach(function (y, i) {
     var yy = Y(y);
@@ -1002,7 +1116,7 @@ function segniSopra() {
 function larghezzaTavola(testo) { return larghezza(testo, 20) + 18; }
 function disegnaCartelli() {
   S.cartelli.forEach(function (c, i) {
-    var k = Math.min(1, (CLOCK - c.t0) / 0.25), x = X(c.x) + c.lato * 3, y = Y(0);
+    var k = Math.min(1, (CLOCK - c.t0) / 0.25), x = X(c.x) + c.lato * (eMuro(S.F, c.x) ? MURO_L + 6 : 3), y = Y(0);
     if (k <= 0) return;
     seme(3000 + i);
     ctx.save();
@@ -1155,6 +1269,7 @@ function protetti() {
   if (g.modo === 'asse') { omone(p); return r; }
   box(p[0] - 42, p[1] - 86, 84, 94);                  // carrello con l'omino
   if (g.id === 'derivata') {
+    if (g.bers && g.bers.c) box(g.bers.c[0] - 20, g.bers.c[1] - 30, 40, 92, 8);
     box(p[0] - 52, p[1] + 34, 104, 30, 6);
     var an = Math.atan2(-pendenza(F, g.W.x) * sy, sx), c = Math.cos(an), s = Math.sin(an);
     for (var d = 0; d <= 150; d += 30) {             // la lancia, a tratti lungo la tangente

@@ -40,8 +40,7 @@ function impagina() {
   NOTEW = Math.max(220, Math.min(300, VW * 0.2));
   TAB0 = VH - (RIGA0 + 4 * RIGAH) - 12;
   Gx0 = NOTEW + 28; Gx1 = VW - 20; Gy0 = 12; Gy1 = TAB0 - 10;
-  $('btnRiprendi').style.left = ((Gx0 + Gx1) / 2 * U) + 'px';    // sulla tabella dei segni, in fondo
-  $('btnRiprendi').style.top = ((VH - 30) * U) + 'px';
+  posaRiprendi();
   calcolaVista();
   preparaFondo();
 }
@@ -468,8 +467,15 @@ function aggiornaComandi() {
   $('btnRifai').disabled = !S.giro;
   // in pausa, a metà giro, compare un pulsante grande al centro del grafico
   $('btnRiprendi').hidden = !(S.giro && !S.giro.finito && !S.play);
+  posaRiprendi();
   document.querySelectorAll('#vel button').forEach(function (b) { b.classList.toggle('attivo', +b.getAttribute('data-v') === S.vel); });
   $('chkPausa').checked = S.autoPausa;
+}
+/** Il pulsante "continua" sta subito sotto il grafico, al centro. */
+function posaRiprendi() {
+  var b = $('btnRiprendi');
+  b.style.left = ((Gx0 + Gx1) / 2 * U) + 'px';
+  b.style.top = ((Gy1 + 6) * U + (b.offsetHeight || 40) / 2) + 'px';
 }
 function playPausa() {
   if (!S.giro || S.giro.finito) return;
