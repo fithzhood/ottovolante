@@ -54,11 +54,14 @@ function calcolaVista() {
 
 // mondo → schermo. Lo zoom dei limiti è uniforme attorno a (x0, y0): stesso fattore su x e su y,
 // quindi la funzione si ingrandisce (o si rimpicciolisce) senza deformarsi. Xb è la x senza zoom.
-function X(x) { var z = S.zoom; return ox + z.x0 * sx + (x - z.x0) * z.z * sx; }
+// Il punto (x0, y0) del mondo resta nel punto (px, py) dello schermo; senza px/py resta dov'era.
+function centroX(z) { return z.px !== undefined ? z.px : ox + z.x0 * sx; }
+function centroY(z) { return z.py !== undefined ? z.py : oy - z.y0 * sy; }
+function X(x) { var z = S.zoom; return centroX(z) + (x - z.x0) * z.z * sx; }
 function Xb(x) { return ox + x * sx; }
-function Y(y) { var z = S.zoom; return oy - z.y0 * sy - (y - z.y0) * z.z * sy; }
-function invX(px) { var z = S.zoom; return z.x0 + ((px - ox) / sx - z.x0) / z.z; }
-function invY(py) { var z = S.zoom; return z.y0 + ((oy - py) / sy - z.y0) / z.z; }
+function Y(y) { var z = S.zoom; return centroY(z) - (y - z.y0) * z.z * sy; }
+function invX(p) { var z = S.zoom; return z.x0 + (p - centroX(z)) / (z.z * sx); }
+function invY(q) { var z = S.zoom; return z.y0 - (q - centroY(z)) / (z.z * sy); }
 function zoomBase(x0, y0) { return { z: 1, x0: x0 || 0, y0: y0 || 0 }; }
 function visA() { return (Gx0 - ox) / sx; }
 function visB() { return (Gx1 - ox) / sx; }
@@ -121,6 +124,9 @@ function disegnaAssi() {
   }
   var lab = 15, k, t, i, zoomato = Math.abs(S.zoom.z - 1) >= 0.02;
   var px = zoomato ? passoBello(70 / (S.zoom.z * sx)) : passoTacche(sx);
+  // le etichette lunghe (1.000.000) chiedono tacche più rade, altrimenti si accavallano
+  var piuLunga = Math.max(Math.abs(invX(Gx0)), Math.abs(invX(Gx1)));
+  for (var giro = 0; zoomato && giro < 6 && larghezza(etTacca(Math.floor(piuLunga / px) * px || px, px), lab) + 18 > px * S.zoom.z * sx; giro++) px = passoBello(px * 1.6);
   var py = zoomato ? passoBello(42 / (S.zoom.z * sy)) : passoTacche(sy);
   for (i = Math.ceil(invX(Gx0) / px); i * px <= invX(Gx1); i++) {
     k = i * px; t = X(k);
@@ -139,7 +145,12 @@ function disegnaAssi() {
   if (x0 > Gx0 && x0 < Gx1 && y0 > Gy0 && y0 < Gy1) scrivi('0', x0 - 8, y0 + 19, lab, MATITA, 0, 'right');
   if (zoomato) {
     var rz = Math.round(S.zoom.z > 1 ? S.zoom.z : 1 / S.zoom.z);
-    scrivi((S.zoom.z > 1 ? 'ingrandimento ×' : 'vista allontanata ×') + (rz >= 1000 ? fmtQuota(rz) : fmt(rz)), Gx1 - 8, Gy1 - 8, 16, MATITA, 0, 'right');
+    var et = (S.zoom.z > 1 ? 'ingrandimento ×' : 'vista allontanata ×') + (rz >= 1000 ? fmtQuota(rz) : fmt(rz));
+    var lw = larghezza(et, 16) + 16;
+    ctx.save(); ctx.globalCompositeOperation = 'source-over';
+    riempi(rettangolo(Gx1 - lw - 6, Gy1 - 30, lw, 26, 8), CARTA, 0.92);
+    ctx.restore();
+    scrivi(et, Gx1 - 14, Gy1 - 11, 16, MATITA, 0, 'right');
   }
 }
 function passoBello(min) {
@@ -158,13 +169,20 @@ function pezziCurva() {
   F.rami.forEach(function (r) {
     var a = Math.max(r[0], A), b = Math.min(r[1], B);
     if (a >= b) return;
-    var e = 1e-7 * Math.max(1, Math.abs(a), Math.abs(b)) / S.zoom.z;
-    var n = Math.ceil((X(b) - X(a)) / 1.5) + 1, pts = [];
-    for (var i = 0; i <= n; i++) {
-      var x = a + (b - a) * i / n;
-      if (i === 0 && a === r[0]) x += e;
-      if (i === n && b === r[1]) x -= e;
-      var y = F.f(x);
+    var e = 1e-7 * Math.max(1, Math.abs(a), Math.abs(b)) / Math.max(1, S.zoom.z);
+    var n = Math.ceil((X(b) - X(a)) / 1.5) + 1, pts = [], xs = [], i, k;
+    for (i = 0; i <= n; i++) xs.push(a + (b - a) * i / n);
+    if (a === r[0]) xs[0] += e;
+    if (b === r[1]) xs[n] -= e;
+    // vicino agli asintoti verticali si infittisce: con la vista allontanata il picco è sottilissimo
+    for (k = -8; k <= 1; k += 0.25) {
+      var d = Math.pow(10, k);
+      if (isFinite(r[0]) && r[0] + d > a && r[0] + d < b) xs.push(r[0] + d);
+      if (isFinite(r[1]) && r[1] - d > a && r[1] - d < b) xs.push(r[1] - d);
+    }
+    xs.sort(function (p, q) { return p - q; });
+    for (i = 0; i < xs.length; i++) {
+      var x = xs[i], y = F.f(x);
       if (!isFinite(y)) { if (pts.length > 1) pezzi.push(pts); pts = []; continue; }
       pts.push([X(x), clampY(Y(y))]);
     }
@@ -197,7 +215,7 @@ function disegnaTabella() {
   }
   var yTop = TAB0 + 6, yFine = TAB0 + RIGA0 + vis.length * RIGAH;
   ctx.save();
-  if (S.zoom.z > 1.02) ctx.globalAlpha = 0.25;
+  if (Math.abs(S.zoom.z - 1) > 0.02) ctx.globalAlpha = 0.25;
   // i punti di tutte le righe visibili, con la loro x scritta in testa
   var tutti = [];
   vis.forEach(function (r) {
