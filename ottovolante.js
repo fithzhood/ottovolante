@@ -40,6 +40,8 @@ function impagina() {
   NOTEW = Math.max(220, Math.min(300, VW * 0.2));
   TAB0 = VH - (RIGA0 + 4 * RIGAH) - 12;
   Gx0 = NOTEW + 28; Gx1 = VW - 20; Gy0 = 12; Gy1 = TAB0 - 10;
+  $('btnRiprendi').style.left = ((Gx0 + Gx1) / 2 * U) + 'px';
+  $('btnRiprendi').style.top = ((Gy0 + Gy1) / 2 * U) + 'px';
   calcolaVista();
   preparaFondo();
 }
@@ -329,9 +331,32 @@ function sovrapposto(r, q) {
   var h = Math.min(r[1] + r[3], q[1] + q[3]) - Math.max(r[1], q[1]);
   return w > 0 && h > 0 ? w * h : 0;
 }
+/** La forma del fumetto: si prova a capo a varie larghezze e si tiene quella più vicina al rettangolo
+ *  aureo (larghezza = 1,618 × altezza), con gli angoli molto arrotondati. */
+var AUREO = (1 + Math.sqrt(5)) / 2, formeFumetto = {};
+function formaFumetto(testo) {
+  if (formeFumetto[testo]) return formeFumetto[testo];
+  var size = 21, riga = 27, migliore = null;
+  for (var max = 90; max <= 420; max += 10) {
+    var righe = aCapo(testo, size, max), lw = 0;
+    righe.forEach(function (r) { lw = Math.max(lw, larghezza(r, size)); });
+    var h = righe.length * riga + 30, r = Math.min(h * 0.34, 34);
+    var w = Math.max(lw + 2 * r * 0.75 + 14, h * 1.2);
+    var scarto = Math.abs(Math.log(w / h / AUREO)) + (righe.length > 5 ? 0.5 : 0);
+    if (!migliore || scarto < migliore.scarto - 1e-6) migliore = { size: size, righe: righe, w: w, h: h, r: r, scarto: scarto };
+  }
+  migliore.w = Math.max(migliore.w, migliore.h * AUREO * 0.92);  // le frasi brevi si allargano un po'
+  formeFumetto[testo] = migliore;
+  return migliore;
+}
 function disegnaFumetti() {
   S.fumetti = S.fumetti.filter(function (b) { return GT - b.t0 < b.dur; });
   var protetti = S.giro && S.giro.protetti ? S.giro.protetti() : [], posati = [];
+  var bt = $('btnRiprendi');                         // il pulsante "continua" non va coperto
+  if (!bt.hidden) {
+    var bw = bt.offsetWidth / U + 16, bh = bt.offsetHeight / U + 16;
+    posati.push([(Gx0 + Gx1) / 2 - bw / 2, (Gy0 + Gy1) / 2 - bh / 2, bw, bh]);
+  }
   S.fumetti.forEach(function (b, n) {
     var an = S.giro && S.giro.ancora(b.chi);
     if (!an) return;
@@ -342,9 +367,7 @@ function disegnaFumetti() {
     if (ax < Gx0 - 20) { testo = '← ' + testo; corpo = null; }
     if (ax > Gx1 + 20) { testo = '→ ' + testo; corpo = null; }
     ax = Math.max(Gx0 + 10, Math.min(Gx1 - 10, ax));
-    var size = 21, righe = aCapo(testo, size, 320);
-    var w = 0; righe.forEach(function (r) { w = Math.max(w, larghezza(r, size)); });
-    w += 30; var h = righe.length * 27 + 18;
+    var f = formaFumetto(testo), size = f.size, righe = f.righe, w = f.w, h = f.h;
     var lato = b.chi === 'sx' ? -1 : 1, cand = [];
     [30, 80, 140, 210].forEach(function (d) {
       [[lato, -1], [-lato, -1], [lato, 1], [-lato, 1], [lato, 0], [-lato, 0]].forEach(function (v) {
@@ -380,14 +403,15 @@ function disegnaFumetti() {
     var dx = ax - base[0], dy = ay - base[1], L = Math.hypot(dx, dy) || 1, k = Math.max(0, L - 10) / L;
     var punta = [base[0] + dx * k, base[1] + dy * k];
     var coda = [[base[0] - dir[0] * 9, base[1] - dir[1] * 9], punta, [base[0] + dir[0] * 9, base[1] + dir[1] * 9]];
-    var corpo = rettangolo(bx, by, w, h, 14);
+    var corpo = rettangolo(bx, by, w, h, f.r);
     ctx.save();
     riempi(corpo, '#fffdf6', 0.94); riempi(coda, '#fffdf6', 0.94);
     seme(1000 + n * 50 + (b.chi === 'dx' ? 7 : 0));
     var col = b.chi === 'dx' ? ROSSO : BLU;
     tratto(corpo, { chiuso: true, lw: 1.7, passo: 10, col: col });
     tratto(coda, { lw: 1.5, col: col });
-    righe.forEach(function (r, i) { scrivi(r, bx + 15, by + 31 + i * 27, size, col); });
+    var ty = by + (h - righe.length * 27) / 2 + 20;
+    righe.forEach(function (r, i) { scrivi(r, bx + w / 2, ty + i * 27, size, col, 0, 'center'); });
     ctx.restore();
   });
 }
@@ -447,6 +471,8 @@ function aggiornaComandi() {
   var c = !S.giro || S.giro.finito;
   $('btnPlay').disabled = c; $('btnNext').disabled = c;
   $('btnRifai').disabled = !S.giro;
+  // in pausa, a metà giro, compare un pulsante grande al centro del grafico
+  $('btnRiprendi').hidden = !(S.giro && !S.giro.finito && !S.play);
   document.querySelectorAll('#vel button').forEach(function (b) { b.classList.toggle('attivo', +b.getAttribute('data-v') === S.vel); });
   $('chkPausa').checked = S.autoPausa;
 }
@@ -475,6 +501,8 @@ function costruisciMenu() {
   });
   $('btnPlay').addEventListener('click', playPausa);
   $('btnNext').addEventListener('click', prossimo);
+  $('btnRiprendi').addEventListener('click', playPausa);
+  tela.addEventListener('click', function () { if (S.giro && !S.giro.finito && !S.play) playPausa(); });
   $('btnRifai').addEventListener('click', function () { if (S.giro) scegliGiro(S.giro.id); });
   $('btnPulita').addEventListener('click', function () { S.giro = null; S.play = false; paginaPulita(); aggiornaComandi(); });
   document.querySelectorAll('#vel button').forEach(function (b) {

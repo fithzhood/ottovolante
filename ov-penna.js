@@ -218,8 +218,9 @@ function aCapo(txt, size, max) {
 function rettangolo(x, y, w, h, r) {
   var P = [];
   [[x + w - r, y + r, -Math.PI / 2], [x + w - r, y + h - r, 0], [x + r, y + h - r, Math.PI / 2], [x + r, y + r, Math.PI]].forEach(function (c) {
-    for (var i = 0; i <= 3; i++) {
-      var a = c[2] + i / 3 * Math.PI / 2;
+    var n = Math.max(3, Math.ceil(r / 4));
+    for (var i = 0; i <= n; i++) {
+      var a = c[2] + i / n * Math.PI / 2;
       P.push([c[0] + Math.cos(a) * r, c[1] + Math.sin(a) * r]);
     }
   });

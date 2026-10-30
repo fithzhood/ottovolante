@@ -91,3 +91,18 @@ button.attivo { background: var(--evidenziatore); }
   .marchio { display: none; }
   button { padding: 0.1em 0.5em; }
 }
+
+/* il pulsante che compare al centro del grafico quando il giro si ferma */
+#btnRiprendi {
+  position: absolute; z-index: 5; transform: translate(-50%, -50%);
+  display: flex; align-items: center; gap: 0.45em;
+  font-size: clamp(20px, 3.2vh, 30px); padding: 0.3em 0.9em 0.3em 0.7em; min-height: 0;
+  background: rgba(255, 253, 246, 0.94); border-width: 2.5px;
+  box-shadow: 0 6px 18px rgba(40, 30, 20, 0.28);
+  animation: compare 0.25s ease-out;
+}
+#btnRiprendi[hidden] { display: none; }
+#btnRiprendi .freccia { color: var(--rosso); font-size: 1.15em; }
+#btnRiprendi:hover { transform: translate(-50%, -50%) rotate(-1deg) scale(1.05); }
+#btnRiprendi:active { transform: translate(-50%, -50%) scale(0.96); }
+@keyframes compare { from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); } }
