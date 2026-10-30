@@ -20,7 +20,7 @@ var CLOCK = 0, GT = 0;     // orologio vero (per il tremolio) e tempo di gioco (
 
 function paginaPulita() {
   IDGIRI.forEach(function (id) { S.prog[id] = -INF; S.fatto[id] = false; });
-  S.cartelli = []; S.limiti = []; S.fumetti = [];
+  S.cartelli = []; S.limiti = []; S.fumetti = []; S.orizz = [];
   S.zoom = { z: 1, x0: 0 };
 }
 
@@ -117,7 +117,7 @@ function disegnaAssi() {
     scrivi('y', x0 + 10, Gy0 + 16, 18, BLU);
   }
   var lab = 15, k, t;
-  if (S.zoom.z < 1.02) {
+  if (Math.abs(S.zoom.z - 1) < 0.02) {
     var px = passoTacche(sx);
     for (k = Math.ceil(visA() / px) * px; k <= visB(); k += px) {
       if (k === 0 || X(k) > Gx1 - 24) continue;
@@ -125,6 +125,16 @@ function disegnaAssi() {
       linea(t, y0 - 4, t, y0 + 4, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
       scrivi(fmt(k), t, y0 + 19, lab, MATITA, 0, 'center');
     }
+  } else if (S.zoom.z < 1) {                     // vista allontanata (limiti a ±∞): tacche a potenze di 10
+    var pz = Math.pow(10, Math.ceil(Math.log(70 / (S.zoom.z * sx)) / Math.LN10));
+    for (k = Math.ceil(invX(Gx0) / pz) * pz; k <= invX(Gx1); k += pz) {
+      if (Math.abs(k) < pz / 2 || X(k) > Gx1 - 30) continue;
+      t = X(k);
+      linea(t, y0 - 4, t, y0 + 4, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
+      scrivi(Math.abs(k) >= 1000 ? fmtQuota(k) : fmt(k), t, y0 + 19, lab, MATITA, 0, 'center');
+    }
+    var rz = Math.round(1 / S.zoom.z);
+    scrivi('vista allontanata ×' + (rz >= 1000 ? fmtQuota(rz) : fmt(rz)), Gx1 - 8, Gy1 - 8, 16, MATITA, 0, 'right');
   } else {
     t = X(S.zoom.x0);
     linea(t, y0 - 5, t, y0 + 5, { lw: 1.2, passate: 1, amp: 0.3, col: MATITA });
@@ -229,7 +239,7 @@ function disegnaTabella() {
       else linea(xa, yc, xb, yc, { lw: 1, passate: 1, col: MATITA, amp: 0.4 });
       if (id === 'dominio' || xb - xa < 30) return;
       var seg = s.s > 0 ? '+' : s.s < 0 ? '−' : '0';
-      scrivi(seg, m - (id === 'segno' ? 0 : 14), yc - 6, s.s < 0 ? 34 : 26, s.s > 0 ? VERDE_INK : ROSSO, 0, 'center');
+      scrivi(seg, m - (id === 'segno' ? 0 : 14), yc - 6, s.s < 0 ? 34 : 26, s.s > 0 ? ROSSO : s.s < 0 ? AZZURRO_INK : BLU, 0, 'center');
       if (id === 'derivata' && s.s) freccina(m + 12, yc - 13, s.s);
       if (id === 'concavita' && s.s) scrivi(s.s > 0 ? '∪' : '∩', m + 14, yc - 6, 24, BLU, 0, 'center');
     });

@@ -11,9 +11,10 @@ var SEME = 1, CNT = 0;
 function seme(s) { SEME = s | 0; CNT = 0; }
 function def(v, d) { return v === undefined || v === null ? d : v; }
 
-var BLU = '#1c3591', ROSSO = '#c4212b', MATITA = '#5a5a60', VERDE_INK = '#1f7a3a';
+var BLU = '#1c3591', ROSSO = '#c4212b', MATITA = '#5a5a60', VERDE_INK = '#1f7a3a', AZZURRO_INK = '#1d7fc4', TERRA = '#7a5230';
 var GIALLO = 'rgba(255, 232, 40, 0.50)', VERDE = 'rgba(150, 235, 70, 0.55)',
-    ROSA = 'rgba(255, 120, 190, 0.42)', AZZURRO = 'rgba(110, 200, 255, 0.45)';
+    ROSA = 'rgba(255, 120, 190, 0.42)', AZZURRO = 'rgba(110, 200, 255, 0.50)',
+    ROSSO_EV = 'rgba(245, 80, 80, 0.42)';
 var CARTA = '#f7f4ec';
 var FONT = 'Gloria, "Segoe Print", "Comic Sans MS", cursive';
 

@@ -14,7 +14,7 @@ var FUNZIONI = [
     dominio: [iv(-INF, INF)], rami: [[-INF, INF]], esclusi: [], salti: [],
     zeri: [{ x: 1, m: 1, t: '1' }], staz: [], flessi: [], nonDer: [], pieni: [], vuoti: [],
     curva: false,
-    limiti: [{ x0: 1, t: '1', caso: 'continua', val: '0' }],
+    limiti: [{ caso: 'menoinf', val: '−∞' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = ℝ', segno: 'zero in x = 1', derivata: 'f′(x) = 1: sempre crescente' } },
 
   { id: 'parabola', breve: 'due zeri', formula: 'x² − 4',
@@ -24,7 +24,7 @@ var FUNZIONI = [
     zeri: [{ x: -2, m: 1, t: '−2' }, { x: 2, m: 1, t: '2' }],
     staz: [{ x: 0, t: '0', tipo: 'min' }], flessi: [], nonDer: [], pieni: [], vuoti: [],
     curva: true,
-    limiti: [{ x0: 2, t: '2', caso: 'continua', val: '0' }],
+    limiti: [{ caso: 'menoinf', val: '+∞' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = ℝ', segno: 'zeri in x = −2 e x = 2', derivata: 'minimo in (0, −4)',
                concavita: 'concavità sempre verso l’alto' } },
 
@@ -36,7 +36,7 @@ var FUNZIONI = [
     staz: [{ x: -R3, t: '−1/√3', tipo: 'max' }, { x: R3, t: '1/√3', tipo: 'min' }],
     flessi: [{ x: 0, t: '0' }], nonDer: [], pieni: [], vuoti: [],
     curva: true,
-    limiti: [{ x0: 1, t: '1', caso: 'continua', val: '0' }],
+    limiti: [{ caso: 'menoinf', val: '−∞' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = ℝ', segno: 'zeri in x = −1, 0, 1', derivata: 'max in x = −1/√3, min in x = 1/√3',
                concavita: 'flesso in (0, 0)' } },
 
@@ -48,7 +48,7 @@ var FUNZIONI = [
     staz: [{ x: -1, t: '−1', tipo: 'max' }, { x: 1, t: '1', tipo: 'min' }],
     flessi: [{ x: 0, t: '0' }], nonDer: [], pieni: [], vuoti: [],
     curva: true,
-    limiti: [{ x0: -1, t: '−1', caso: 'continua', val: '4' }],
+    limiti: [{ caso: 'menoinf', val: '−∞' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = ℝ', segno: 'zeri in x = −2 e x = 1 (doppio: il segno non cambia)',
                derivata: 'max in (−1, 4), min in (1, 0)', concavita: 'flesso in (0, 2)' } },
 
@@ -61,7 +61,7 @@ var FUNZIONI = [
     zeri: [{ x: 0, m: 1, t: '0' }], staz: [], flessi: [], nonDer: [{ x: 0, t: '0' }],
     pieni: [[0, 0]], vuoti: [],
     curva: true,
-    limiti: [{ x0: 0, t: '0', caso: 'destra', val: '0' }],
+    limiti: [{ x0: 0, t: '0', caso: 'destra', val: '0' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = [0, +∞)', segno: 'zero in x = 0, poi sempre positiva',
                derivata: 'sempre crescente; in 0 la tangente è verticale', concavita: 'concavità sempre verso il basso' } },
 
@@ -74,7 +74,7 @@ var FUNZIONI = [
     esclusi: [{ x: 0, t: '0', tipo: 'asintoto' }], salti: [],
     zeri: [], staz: [], flessi: [], nonDer: [], pieni: [], vuoti: [],
     curva: true,
-    limiti: [{ x0: 0, t: '0', caso: 'infinito', sx: '−∞', dx: '+∞' }],
+    limiti: [{ caso: 'menoinf', val: '0', y: 0 }, { x0: 0, t: '0', caso: 'infinito', sx: '−∞', dx: '+∞' }, { caso: 'piuinf', val: '0', y: 0 }],
     appunti: { dominio: 'D = (−∞, 0) ∪ (0, +∞)', segno: 'mai zero: cambia segno all’asintoto',
                derivata: 'decrescente su ciascuno dei due intervalli',
                concavita: 'verso il basso per x < 0, verso l’alto per x > 0' } },
@@ -87,7 +87,7 @@ var FUNZIONI = [
     esclusi: [{ x: 1, t: '1', tipo: 'buco' }], salti: [],
     zeri: [{ x: -1, m: 1, t: '−1' }], staz: [], flessi: [], nonDer: [], pieni: [], vuoti: [[1, 2]],
     curva: false,
-    limiti: [{ x0: 1, t: '1', caso: 'buco', val: '2' }],
+    limiti: [{ caso: 'menoinf', val: '−∞' }, { x0: 1, t: '1', caso: 'buco', val: '2' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = (−∞, 1) ∪ (1, +∞)', segno: 'zero in x = −1',
                derivata: 'f′(x) = 1 dove esiste: sempre crescente' } },
 
@@ -100,7 +100,7 @@ var FUNZIONI = [
     zeri: [{ x: -2, m: 1, t: '−2' }, { x: 3, m: 1, t: '3' }], staz: [], flessi: [],
     nonDer: [{ x: 1, t: '1' }], pieni: [[1, -2]], vuoti: [[1, 3]],
     curva: false,
-    limiti: [{ x0: 1, t: '1', caso: 'salto', sx: '3', dx: '−2' }],
+    limiti: [{ caso: 'menoinf', val: '−∞' }, { x0: 1, t: '1', caso: 'salto', sx: '3', dx: '−2' }, { caso: 'piuinf', val: '+∞' }],
     appunti: { dominio: 'D = ℝ (il salto non toglie niente)',
                segno: 'zeri in x = −2 e x = 3; cambia segno anche nel salto',
                derivata: 'crescente su ciascun tratto; in x = 1 f′ non esiste' } },
@@ -114,7 +114,7 @@ var FUNZIONI = [
     esclusi: [{ x: 0, t: '0', tipo: 'asintoto' }], salti: [],
     zeri: [], staz: [], flessi: [], nonDer: [], pieni: [], vuoti: [],
     curva: true,
-    limiti: [{ x0: 0, t: '0', caso: 'infinito', sx: '+∞', dx: '+∞', val: '+∞' }],
+    limiti: [{ caso: 'menoinf', val: '0', y: 0 }, { x0: 0, t: '0', caso: 'infinito', sx: '+∞', dx: '+∞', val: '+∞' }, { caso: 'piuinf', val: '0', y: 0 }],
     appunti: { dominio: 'D = (−∞, 0) ∪ (0, +∞)', segno: 'sempre positiva',
                derivata: 'crescente per x < 0, decrescente per x > 0', concavita: 'concavità sempre verso l’alto' } }
 ];
@@ -127,6 +127,14 @@ function fmt(v, dec) {
   else s = v.toFixed(dec);
   if (/^-0[.,]?0*$/.test(s)) s = s.slice(1);
   return s.replace('.', ',').replace('-', '−');
+}
+/** Numeri grandi col punto delle migliaia, piccoli con abbastanza decimali da non sembrare zero. */
+function fmtQuota(v) {
+  var a = Math.abs(v);
+  if (a >= 1000) return (v < 0 ? '−' : '') + String(Math.round(a)).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  if (a >= 100) return fmt(v, 0);
+  if (a >= 1 || a === 0) return fmt(v, 2);
+  return fmt(v, Math.max(3, Math.ceil(-Math.log(a) / Math.LN10 - 1e-9)));
 }
 function fmtSegnato(v, dec) { var s = fmt(v, dec); return v > 0 && s.charAt(0) !== '+' && !/^0[,0]*$/.test(s) ? '+' + s : s; }
 

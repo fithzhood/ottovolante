@@ -58,7 +58,7 @@ function creaGiro(id) {
   };
   S.prog[id] = -INF; S.fatto[id] = false;
   if (id === 'dominio') S.cartelli = [];
-  if (id === 'limiti') S.limiti = [];
+  if (id === 'limiti') { S.limiti = []; S.orizz = []; }
   COSTRUTTORI[id](g, F);
   g.aggiorna = aggiornaGiro;
   g.cammina = cammina;
@@ -143,20 +143,23 @@ function ancora(chi) {
 var COSTRUTTORI = {};
 COSTRUTTORI.dominio = function (g, F) {
   g.modo = 'asse';
-  var A = g.A, B = g.B, P = g.passi, d = 24 / sx, x = A;
+  var A = g.A, B = g.B, P = g.passi, x = A;
   var ints = F.dominio.filter(function (v) { return v.b > A && v.a < B; });
   g.W.x = A;
   function pianta(px, testo, lato) { return Fai(function () { S.cartelli.push({ x: px, testo: testo, lato: lato, t0: CLOCK }); }); }
+  // l'omino si ferma sempre fuori dalla tavola del cartello, così non la copre mentre ne parla
+  function largo(testo) { return (larghezzaTavola(testo) + 26) / sx; }
   ints.forEach(function (iv, n) {
     var t;
     if (iv.a > x + 1e-9) {
       if (n === 0) P.push(Di('W', 'Qui il binario non c’è: sono fuori dal dominio'));
-      P.push(Cammina(iv.a));
+      P.push(Cammina(iv.a - 26 / sx));
       t = etichetta(F, iv.a);
       P.push(pianta(iv.a, (iv.aIn ? '[' : '(') + t, 1));
       P.push(Di('W', iv.aIn ? 'Qui il binario comincia, e x = ' + t + ' c’è: parentesi quadra!'
                             : 'Qui il binario comincia, ma x = ' + t + ' è escluso: parentesi tonda', true));
     } else if (n === 0) {
+      g.W.x = x = A + largo('(−∞');
       P.push(pianta(A, '(−∞', 1));
       P.push(Di('W', 'Parto da meno infinito e pianto il primo cartello'));
     }
@@ -167,20 +170,24 @@ COSTRUTTORI.dominio = function (g, F) {
         P.push(Attendi(0.6), posa('cammina'));
       }
     });
-    if (iv.b >= B) { P.push(Cammina(B), pianta(B, '+∞)', -1)); x = B; return; }
+    if (iv.b >= B) {
+      P.push(Cammina(B - largo('+∞)')), pianta(B, '+∞)', -1));
+      P.push(Di('W', 'E arrivo fino a più infinito'));
+      x = B; return;
+    }
     t = etichetta(F, iv.b);
     var dopo = ints[n + 1];
     if (dopo && Math.abs(dopo.a - iv.b) < 1e-9) {          // un solo punto escluso: lo si aggira
       var esc = cerca(F.esclusi, iv.b);
-      P.push(Cammina(iv.b - d), pianta(iv.b, t + ')', -1));
+      P.push(Cammina(iv.b - largo(t + ')')), pianta(iv.b, t + ')', -1));
       P.push(Di('W', esc && esc.tipo === 'asintoto'
         ? 'Un muro! In x = ' + t + ' c’è un asintoto: qui la funzione non esiste'
         : 'Un buco! In x = ' + t + ' la funzione non esiste', true));
-      P.push(Salta(iv.b + d), pianta(iv.b, '(' + t, 1));
+      P.push(Salta(iv.b + largo('(' + t)), pianta(iv.b, '(' + t, 1));
       P.push(Di('W', 'Lo aggiro, pianto un altro cartello e riparto!'));
-      x = iv.b + d;
+      x = iv.b + largo('(' + t);
     } else {
-      P.push(Cammina(iv.b), pianta(iv.b, t + (iv.bIn ? ']' : ')'), -1));
+      P.push(Cammina(iv.b - largo(t + ')')), pianta(iv.b, t + (iv.bIn ? ']' : ')'), -1));
       P.push(Di('W', 'Qui il binario finisce', true));
       x = iv.b;
     }
@@ -291,9 +298,35 @@ COSTRUTTORI.limiti = function (g, F) {
     var v = F.f(x), d = h >= 0.1 ? 1 : h >= 0.01 ? 2 : 3;
     fumetto(chi, 'f(' + fmt(x, d) + ') = ' + (Math.abs(v) >= 1000 ? fmt(v, 0) : fmt(v, d)), 3.4);
   }
+  // x → ±∞: un omino solo parte verso l'orizzonte, e la vista si allontana per stargli dietro
+  function infinito(L) {
+    var s = L.caso === 'piuinf' ? 1 : -1, chi = s > 0 ? 'sx' : 'dx', inf = s > 0 ? '+∞' : '−∞';
+    var spazio = s > 0 ? Gx1 - ox : ox - Gx0;
+    var x0 = s * Math.max(1, Math.min(2, Math.floor(0.6 * spazio / sx)));
+    function zoomInf(x) { return Math.min(1, 0.78 * spazio / (Math.abs(x) * sx)); }
+    P.push(Fai(function (g) { S.zoom = { z: 1, x0: 0 }; g.amici = {}; g.amici[chi] = { x: x0 }; g.lineaX0 = false; }));
+    P.push(Di(chi, 'Vado verso ' + (s > 0 ? 'più' : 'meno') + ' infinito, sempre più lontano, e grido la mia quota', false, 4));
+    P.push(Attendi(2.4));
+    [x0, s * 10, s * 100, s * 1000].forEach(function (xv, n) {
+      if (n) P.push(Tween(1.5, function (g, p) { p.x = Math.abs(g.amici[chi].x); p.z = S.zoom.z; }, function (g, u, p) {
+        g.amici[chi].x = s * Math.exp(lerp(Math.log(p.x), Math.log(Math.abs(xv)), u));
+        S.zoom.z = Math.exp(lerp(Math.log(p.z), Math.log(zoomInf(xv)), u));
+        g.amici.muove = u < 1;
+      }));
+      P.push(Fai(function () { fumetto(chi, 'f(' + (Math.abs(xv) >= 1000 ? fmtQuota(xv) : fmt(xv)) + ') = ' + fmtQuota(F.f(xv)), 3.4); }));
+      P.push(Attendi(1.9));
+    });
+    var finito = L.val.indexOf('∞') < 0, ris = 'lim x→' + inf + ' f(x) = ' + L.val;
+    if (finito) P.push(Fai(function () { S.orizz.push(L.y); }));
+    P.push(Di(chi, finito ? 'Mi avvicino sempre più a quota ' + L.val + ': ' + ris + '. Asintoto orizzontale y = ' + L.val
+                          : (L.val === '+∞' ? 'Salgo' : 'Scendo') + ' senza fine: ' + ris, true));
+    P.push(Fai(function () { S.limiti.push(ris + (finito ? ' (asintoto y = ' + L.val + ')' : '')); }), Attendi(1.2));
+    P.push(Tween(0.9, function (g, p) { p.z = S.zoom.z; }, function (g, u, p) { S.zoom.z = Math.exp(lerp(Math.log(p.z), 0, u)); }));
+  }
   F.limiti.forEach(function (L) {
+    if (L.caso === 'piuinf' || L.caso === 'menoinf') { infinito(L); return; }
     var x0 = L.x0, t = L.t, soloDx = L.caso === 'destra';
-    P.push(Fai(function (g) { S.zoom = { z: 1, x0: x0 }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; }));
+    P.push(Fai(function (g) { S.zoom = { z: 1, x0: x0 }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; g.lineaX0 = true; }));
     P.push(Di('sx', soloDx ? 'Io da sinistra non posso arrivare: qui la funzione non esiste!' : 'Io arrivo da sinistra!', false, 4));
     P.push(Di('dx', 'E io da destra! Ci avviciniamo a x = ' + t + ' e gridiamo la nostra quota', false, 4));
     P.push(Attendi(2.4));
@@ -339,20 +372,31 @@ COSTRUTTORI.limiti = function (g, F) {
 
 // ── Disegno degli attori ──
 function omino(x, y, o) {
-  var c = o.col || BLU, sw = o.posa === 'cammina' ? Math.sin(o.fase || 0) * 7 : 0;
+  var c = o.col || BLU, sw = o.posa === 'cammina' ? Math.sin(o.fase || 0) * 7 : o.posa === 'corsa' ? Math.sin(o.fase || 0) * 11 : 0;
   ctx.save();
   ctx.translate(x, y);
   if (o.rot) ctx.rotate(o.rot);
   ctx.scale((o.dir < 0 ? -1 : 1) * OMINO, OMINO);
   seme(o.seme || 40);
-  tratto([[0, -17], [sw, 0], [sw + 4, 0]], { col: c, lw: 1.7, passo: 5 });
-  tratto([[0, -17], [-sw, 0], [-sw + 4, 0]], { col: c, lw: 1.7, passo: 5 });
+  if (o.posa === 'raccolto') {                       // gambe piegate per la capriola
+    tratto([[0, -17], [8, -21], [4, -9]], { col: c, lw: 1.7, passo: 5 });
+    tratto([[0, -17], [6, -24], [1, -12]], { col: c, lw: 1.7, passo: 5 });
+  } else {
+    tratto([[0, -17], [sw, 0], [sw + 4, 0]], { col: c, lw: 1.7, passo: 5 });
+    tratto([[0, -17], [-sw, 0], [-sw + 4, 0]], { col: c, lw: 1.7, passo: 5 });
+  }
   evidenzia([[-1, -32], [1, -19]], 11, o.maglia || GIALLO);
   tratto([[0, -33], [0, -16]], { col: c, lw: 1.8 });
   if (o.posa === 'perplesso') {
     tratto([[0, -29], [8, -37], [4, -47]], { col: c, lw: 1.6, passo: 5 });
     tratto([[0, -29], [-8, -21]], { col: c, lw: 1.6 });
     scrivi('?', 13, -58, 24, ROSSO);
+  } else if (o.posa === 'lancia') {
+    tratto([[0, -29], [9, -47]], { col: c, lw: 1.6 });
+    tratto([[0, -29], [-8, -21]], { col: c, lw: 1.6 });
+  } else if (o.posa === 'raccolto') {
+    tratto([[0, -29], [9, -25], [7, -19]], { col: c, lw: 1.6, passo: 5 });
+    tratto([[0, -29], [7, -27], [5, -20]], { col: c, lw: 1.6, passo: 5 });
   } else {
     tratto([[0, -29], [-8 - sw * 0.3, -20]], { col: c, lw: 1.6 });
     tratto([[0, -29], [8 + sw * 0.3, -20]], { col: c, lw: 1.6 });
@@ -369,11 +413,12 @@ function testa(x, y, c, amico) {
     linea(x + 5, y - 6, x + 14, y - 5, { col: c, lw: 1.6 });
   }
 }
-function carrello(xs, ys, ang, conAsta) {
+function carrello(xs, ys, ang, conAsta, conTrivella) {
   ctx.save(); ctx.translate(xs, ys); ctx.rotate(ang);
   seme(31);
   if (conAsta) linea(-110, 0, 110, 0, { col: ROSSO, lw: 2.4, amp: 0.4, passo: 30 });
   ctx.scale(OMINO, OMINO);
+  if (conTrivella) trivella();
   evidenzia([[2, -36], [2, -24]], 10, GIALLO);
   tratto([[2, -37], [2, -22]], { lw: 1.8 });
   tratto([[2, -32], [-8, -44], [-12, -51]], { lw: 1.6, passo: 5 });
@@ -387,22 +432,33 @@ function carrello(xs, ys, ang, conAsta) {
   ctx.restore();
 }
 
-/** Liana o asta: un solo perno per zona, la lunghezza si adatta. */
+/** Liana o asta: un solo perno per zona. L'omino lo aggancia, ci gira attorno finché l'attrezzo
+ *  non si dovrebbe allungare troppo, poi lo lascia e prosegue in volo, con le capriole, lungo la
+ *  curva fino alla fine della zona: se lì c'è un flesso, ci atterra in piedi. */
 var cachePerni = { chiave: '', zone: [] };
+function puntoSchermo(F, x) { return [X(x), Y(F.f(x))]; }
 function zoneConcavita(g) {
   var chiave = [g.F.id, sx, sy, ox, oy].join(',');
   if (cachePerni.chiave === chiave) return cachePerni.zone;
   var F = g.F, zone = riga(F, 'concavita', g.A, g.B).segs.filter(function (z) { return z.s === 1 || z.s === -1; });
   zone.forEach(function (z) {
-    var best = null, i, n = 160;
-    for (i = 1; i < n; i++) {
-      var x = lerp(z.a, z.b, i / n), y = F.f(x), ys = Y(y);
-      if (!isFinite(ys) || ys < Gy0 + 30 || ys > Gy1 - 30) continue;
-      var p = -F.d1(x) * sy / sx, q = -F.d2(x) * sy / (sx * sx);
-      var k = Math.abs(q) / Math.pow(1 + p * p, 1.5);
-      if (!best || k > best.k) best = { x: x, xs: X(x), ys: ys, p: p, q: q, k: k };
+    var best = null, i, n = 200, x, q;
+    // il tratto di zona che si vede: fuori dallo schermo il carrello corre e non si anima niente
+    var xa = null, xb = null, xe = null, ye = null;   // xe: il punto più basso (liana) o più alto (asta)
+    for (i = 0; i <= n; i++) {
+      x = lerp(z.a, z.b, i / n);
+      if (i === 0) x += 1e-6;
+      if (i === n) x -= 1e-6;
+      q = puntoSchermo(F, x);
+      if (!isFinite(q[1]) || q[1] < Gy0 + 10 || q[1] > Gy1 - 10) continue;
+      if (xa === null) xa = x;
+      xb = x;
+      if (ye === null || (z.s > 0 ? q[1] > ye : q[1] < ye)) { xe = x; ye = q[1]; }
+      var p = -F.d1(x) * sy / sx, qq = -F.d2(x) * sy / (sx * sx);
+      var k = Math.abs(qq) / Math.pow(1 + p * p, 1.5);
+      if (q[1] > Gy0 + 30 && q[1] < Gy1 - 30 && (!best || k > best.k)) best = { x: x, xs: q[0], ys: q[1], p: p, q: qq, k: k };
     }
-    if (!best) { z.perno = null; return; }
+    if (!best || xb - xa < 1e-6) { z.perno = null; return; }
     var cx = best.xs - best.p * (1 + best.p * best.p) / best.q, cy = best.ys + (1 + best.p * best.p) / best.q;
     var dx = cx - best.xs, dy = cy - best.ys, r = Math.hypot(dx, dy);
     if (r > 300) { cx = best.xs + dx / r * 300; cy = best.ys + dy / r * 300; }
@@ -412,7 +468,30 @@ function zoneConcavita(g) {
     var yc = Y(F.f(invX(cx)));                         // il perno deve stare dalla parte giusta
     if (z.s > 0 && cy > yc - 40) cy = Math.max(Gy0 + 14, yc - 120);
     if (z.s < 0 && cy < yc + 40) cy = Math.min(Gy1 - 14, yc + 120);
+    // se la zona ha un fondo (o una cima) interno, il perno ci sta sopra: l'oscillazione ha senso
+    var interno = xe - xa > 40 / sx && xb - xe > 40 / sx;
+    if (interno && z.s > 0) {
+      cx = X(xe);
+      cy = Math.max(Gy0 + 14, Math.min(cy, ye - 110));
+    }
+    if (z.s < 0) cy = Math.min(Gy1 - 10, Math.max(cy, Y(F.f(xa)) + 50));   // il pavimento sta sotto la partenza
     z.perno = [cx, cy];
+    z.xa = xa; z.xb = xb;
+    // dove pianta l'asta (o aggancia il rampino), e dove la lascia
+    var xg = Math.min(xb, xa + (z.s < 0 ? 70 : 90) / sx);
+    if (interno) xg = Math.min(xg, xe - 30 / sx);           // aggancia prima del fondo (o della cima)
+    var pg = puntoSchermo(F, xg), L0 = Math.hypot(pg[0] - cx, pg[1] - cy), xr = xg;
+    var tetto = xa + 0.72 * (xb - xa);
+    for (x = xg; x < tetto; x += 3 / sx) {
+      q = puntoSchermo(F, x);
+      if (!isFinite(q[1]) || Math.abs(Math.hypot(q[0] - cx, q[1] - cy) - L0) > 0.12 * L0) break;
+      xr = x;
+    }
+    z.xg = xg; z.L0 = L0;
+    xr = Math.max(xr, xg + 30 / sx);
+    if (interno) xr = Math.max(xr, xe + 45 / sx);          // lo lascia solo dopo aver superato il fondo (o la cima)
+    z.xr = Math.min(Math.max(tetto, interno ? xe + 45 / sx : tetto), xr, xb - 40 / sx);
+    z.giri = Math.max(1, Math.round((X(xb) - X(z.xr)) / 300));
   });
   cachePerni = { chiave: chiave, zone: zone };
   return zone;
@@ -425,10 +504,98 @@ function attrezzo(g) {
   if (!z || !z.perno) return null;
   if (g.ultimaZona && Math.abs(x - z.a) < 1e-6 && g.ultimaZona !== z) z = g.ultimaZona;   // fermo sul flesso: tiene l'attrezzo di prima
   g.ultimaZona = z;
+  var a = { z: z, p: p, k: 0, t: 0 };
+  if (x < z.xg) { a.fase = 'lancio'; a.k = Math.max(0, Math.min(1, (X(x) - X(z.xa)) / Math.max(1, X(z.xg) - X(z.xa)))); }
+  else if (x < z.xr) a.fase = 'aggancio';
+  else { a.fase = 'volo'; a.t = Math.max(0, Math.min(1, (X(x) - X(z.xr)) / Math.max(1, X(z.xb) - X(z.xr)))); }
   var ux = p[0] - z.perno[0], uy = p[1] - z.perno[1], L = Math.hypot(ux, uy) || 1;
-  ux /= L; uy /= L;
-  var d = (z.s > 0 ? 12 : 44) * OMINO, testa = [p[0] + ux * d, p[1] + uy * d];
-  return { z: z, p: p, u: [ux, uy], testa: testa };
+  a.u = [ux / L, uy / L];
+  a.testa = a.fase === 'aggancio' ? [p[0] + a.u[0] * (z.s > 0 ? 12 : 44) * OMINO, p[1] + a.u[1] * (z.s > 0 ? 12 : 44) * OMINO]
+                                  : [p[0], p[1] - 60 * OMINO];
+  return a;
+}
+function rampino(x, y, ang) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(ang);
+  tratto([[-13, 0], [2, 0]], { col: '#3c3c48', lw: 2 });
+  tratto([[0, 0], [6, -5], [3, -10]], { col: '#3c3c48', lw: 1.7, passo: 4 });
+  tratto([[0, 0], [6, 5], [3, 10]], { col: '#3c3c48', lw: 1.7, passo: 4 });
+  ctx.restore();
+}
+function ramo(c) {
+  tratto([[c[0] - 30, c[1] + 3], [c[0], c[1] - 2], [c[0] + 30, c[1] + 4]], { col: VERDE_INK, lw: 2.6 });
+  ellisse(c[0] - 20, c[1] - 6, 7, 3.5, { col: VERDE_INK, lw: 1.3 }); ellisse(c[0] + 19, c[1] - 5, 7, 3.5, { col: VERDE_INK, lw: 1.3 });
+}
+function pavimento(c) {
+  linea(c[0] - 38, c[1], c[0] + 38, c[1], { col: MATITA, lw: 2 });
+  tratteggio([[c[0] - 38, c[1]], [c[0] + 38, c[1]], [c[0] + 38, c[1] + 11], [c[0] - 38, c[1] + 11]], { col: MATITA, sp: 4, alpha: 0.55, ang: 0.8 });
+  tratto([[c[0] - 7, c[1] - 1], [c[0] - 3, c[1] + 6], [c[0] + 9, c[1] + 6], [c[0] + 13, c[1] - 1]], { col: MATITA, lw: 1.4, passo: 5 });
+}
+function appeso(p, rot) {
+  ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(rot - Math.PI / 2); ctx.scale(OMINO, OMINO);
+  seme(71);
+  tratto([[-3, 0], [0, 20]], { lw: 1.6 }); tratto([[3, 0], [0, 20]], { lw: 1.6 });
+  evidenzia([[0, 20], [0, 34]], 11, GIALLO);
+  tratto([[0, 18], [0, 36]], { lw: 1.8 });
+  var sw = Math.sin(GT * 3) * 4;
+  tratto([[0, 35], [-5 + sw, 52]], { lw: 1.7 }); tratto([[0, 35], [5 + sw, 52]], { lw: 1.7 });
+  ctx.rotate(Math.PI);
+  testa(0, -10, BLU, false);
+  ctx.restore();
+}
+function disegnaConcavita(g, p) {
+  var a = attrezzo(g);
+  if (!a) { omino(p[0], p[1], { posa: 'fermo' }); return; }
+  var z = a.z, c = z.perno, liana = z.s > 0, LEGNO = '#8a5a2b';
+  seme(70);
+  if (liana) ramo(c); else pavimento(c);
+  if (a.fase === 'lancio') {
+    if (liana) {                                       // lancia il rampino verso il ramo
+      omino(p[0], p[1], { posa: 'lancia' });
+      var mano = [p[0] + 9 * OMINO, p[1] - 47 * OMINO];
+      var h = [lerp(mano[0], c[0], a.k), lerp(mano[1], c[1], a.k) - 50 * Math.sin(Math.PI * a.k)];
+      tratto([mano, h], { col: VERDE_INK, lw: 1.4, passo: 12, dash: [5, 4] });
+      rampino(h[0], h[1], Math.atan2(c[1] - mano[1], c[0] - mano[0]));
+    } else {                                           // rincorsa: la punta dell'asta scende verso il pavimento
+      omino(p[0], p[1], { posa: 'corsa', fase: g.W.passi / 6 });
+      var m2 = [p[0] + 9 * OMINO, p[1] - 26 * OMINO], avanti = [m2[0] + 100, m2[1] - 22];
+      var punta = [lerp(avanti[0], c[0], a.k * a.k), lerp(avanti[1], c[1], a.k * a.k)];
+      tratto([m2, punta], { col: LEGNO, lw: 3.2, passo: 20, amp: 0.4 });
+    }
+    return;
+  }
+  var rot = Math.atan2(a.u[1], a.u[0]);
+  if (a.fase === 'aggancio') {
+    if (liana) {
+      rampino(c[0], c[1] + 4, Math.PI / 2);
+      var mx = (c[0] + p[0]) / 2 - a.u[1] * 7, my = (c[1] + p[1]) / 2 + a.u[0] * 7;
+      tratto([c, [mx, my], p], { col: VERDE_INK, lw: 1.8, passo: 10 });
+      appeso(p, rot);
+    } else {
+      tratto([c, p], { col: LEGNO, lw: 3.2, passo: 20, amp: 0.4 });
+      omino(p[0], p[1], { posa: 'lancia', rot: rot + Math.PI / 2 });
+    }
+    return;
+  }
+  // volo: l'attrezzo resta indietro, l'omino fa le capriole e atterra in piedi
+  var dopo = X(g.W.x) - X(z.xr), svanisce = Math.max(0, 1 - dopo / 170), e = Math.min(1, dopo / 110);
+  var pr = puntoSchermo(g.F, z.xr);
+  if (svanisce > 0) {
+    if (liana) {
+      rampino(c[0], c[1] + 4, Math.PI / 2);
+      var giu = [c[0] + Math.sin(dopo / 25) * 12 * (1 - e), c[1] + z.L0 * 0.85];
+      tratto([c, [lerp(pr[0], giu[0], e), lerp(pr[1], giu[1], e)]], { col: VERDE_INK, lw: 1.8, passo: 10, alpha: 0.9 * svanisce });
+    } else {
+      var t0 = Math.atan2(pr[1] - c[1], pr[0] - c[0]), t1 = pr[0] >= c[0] ? 0 : -Math.PI;
+      var th = lerp(t0, t1, e * e);
+      tratto([c, [c[0] + Math.cos(th) * z.L0, c[1] + Math.sin(th) * z.L0]], { col: LEGNO, lw: 3.2, passo: 20, amp: 0.4, alpha: 0.9 * svanisce });
+    }
+  }
+  var giro = 2 * Math.PI * z.giri * (a.t * a.t * (3 - 2 * a.t)), alto = 34 * OMINO;
+  ctx.save();
+  ctx.translate(p[0], p[1] - alto);
+  ctx.rotate(giro);
+  omino(0, alto, { posa: a.t > 0.88 ? 'fermo' : 'raccolto' });
+  ctx.restore();
 }
 
 function disegnaAttori() {
@@ -437,9 +604,11 @@ function disegnaAttori() {
     if (!g.amici) return;
     var x0 = S.zoom.x0;
     seme(60);
-    linea(X(x0), Gy0 + 10, X(x0), Gy1 - 10, { col: MATITA, lw: 1, passate: 1, dash: [3, 7], amp: 0.3 });
+    if (g.lineaX0) linea(X(x0), Gy0 + 10, X(x0), Gy1 - 10, { col: MATITA, lw: 1, passate: 1, dash: [3, 7], amp: 0.3 });
     ['sx', 'dx'].forEach(function (chi) {
-      var a = g.amici[chi], y = F.f(a.x), fuori = !isFinite(y);
+      var a = g.amici[chi];
+      if (!a) return;
+      var y = F.f(a.x), fuori = !isFinite(y);
       var ys = Y(fuori ? 0 : y);
       if (fuoriY(ys)) return;
       omino(X(a.x) + (chi === 'sx' ? -10 : 10), ys, {
@@ -455,35 +624,9 @@ function disegnaAttori() {
     omino(p[0], p[1] - 1, { posa: g.W.hop ? 'fermo' : g.W.posa, fase: g.W.passi / 9 });
     return;
   }
-  if (g.id === 'concavita') {
-    var a = attrezzo(g);
-    if (!a) { carrello(p[0], p[1], 0, false); return; }
-    var c = a.z.perno, rot = Math.atan2(a.u[1], a.u[0]);
-    seme(70);
-    if (a.z.s > 0) {                                   // liana appesa a un ramo
-      tratto([[c[0] - 26, c[1] + 2], [c[0], c[1] - 2], [c[0] + 26, c[1] + 3]], { col: VERDE_INK, lw: 2.4 });
-      ellisse(c[0] - 18, c[1] - 6, 6, 3, { col: VERDE_INK, lw: 1.3 }); ellisse(c[0] + 16, c[1] - 5, 6, 3, { col: VERDE_INK, lw: 1.3 });
-      var mx = (c[0] + a.p[0]) / 2 - a.u[1] * 7, my = (c[1] + a.p[1]) / 2 + a.u[0] * 7;
-      tratto([c, [mx, my], a.p], { col: VERDE_INK, lw: 1.8, passo: 10 });
-      ctx.save(); ctx.translate(a.p[0], a.p[1]); ctx.rotate(rot - Math.PI / 2); ctx.scale(OMINO, OMINO);
-      seme(71);
-      tratto([[-3, 0], [0, 20]], { lw: 1.6 }); tratto([[3, 0], [0, 20]], { lw: 1.6 });
-      evidenzia([[0, 20], [0, 34]], 11, GIALLO);
-      tratto([[0, 18], [0, 36]], { lw: 1.8 });
-      var sw = Math.sin(GT * 3) * 4;
-      tratto([[0, 35], [-5 + sw, 52]], { lw: 1.7 }); tratto([[0, 35], [5 + sw, 52]], { lw: 1.7 });
-      ctx.rotate(Math.PI);
-      testa(0, -10, BLU, false);
-      ctx.restore();
-    } else {                                           // asta piantata sotto
-      tratto([[c[0] - 10, c[1] + 6], [c[0], c[1] - 3], [c[0] + 10, c[1] + 6]], { col: MATITA, lw: 1.8 });
-      tratto([c, a.p], { col: '#8a5a2b', lw: 3.2, passo: 20, amp: 0.4 });
-      omino(a.p[0], a.p[1], { posa: 'fermo', rot: rot + Math.PI / 2 });
-    }
-    return;
-  }
+  if (g.id === 'concavita') { disegnaConcavita(g, p); return; }
   var ang = g.W.hop ? 0 : Math.atan2(-pendenza(F, g.W.x) * sy, sx);
-  carrello(p[0], p[1], ang, g.id === 'derivata' && !g.W.hop);
+  carrello(p[0], p[1], ang, g.id === 'derivata' && !g.W.hop, g.id === 'segno' && !g.W.hop && g.W.y < 0);
   if (g.id === 'derivata' && !g.W.hop) {
     var m = pendenza(F, g.W.x);
     seme(80);
@@ -492,10 +635,10 @@ function disegnaAttori() {
 }
 
 // ── Sfondo del giro in corso: grandi segni a evidenziatore ──
-function piu(cx, cy, r) { evidenzia([[cx - r, cy], [cx + r, cy]], r * 0.34, VERDE); evidenzia([[cx, cy - r], [cx, cy + r]], r * 0.34, VERDE); }
-function meno(cx, cy, r) { evidenzia([[cx - r, cy], [cx + r, cy]], r * 0.34, ROSA); }
+function piu(cx, cy, r) { evidenzia([[cx - r, cy], [cx + r, cy]], r * 0.34, ROSSO_EV); evidenzia([[cx, cy - r], [cx, cy + r]], r * 0.34, ROSSO_EV); }
+function meno(cx, cy, r) { evidenzia([[cx - r, cy], [cx + r, cy]], r * 0.34, AZZURRO); }
 function frecciona(cx, cy, r, s) {
-  var col = s > 0 ? VERDE : ROSA, a = [cx - r, cy + s * r * 0.6], b = [cx + r, cy - s * r * 0.6];
+  var col = s > 0 ? ROSSO_EV : AZZURRO, a = [cx - r, cy + s * r * 0.6], b = [cx + r, cy - s * r * 0.6];
   evidenzia([a, b], r * 0.26, col);
   var ux = (b[0] - a[0]) / Math.hypot(b[0] - a[0], b[1] - a[1]), uy = (b[1] - a[1]) / Math.hypot(b[0] - a[0], b[1] - a[1]);
   evidenzia([[b[0] - ux * r * 0.5 - uy * r * 0.4, b[1] - uy * r * 0.5 + ux * r * 0.4], b, [b[0] - ux * r * 0.5 + uy * r * 0.4, b[1] - uy * r * 0.5 - ux * r * 0.4]], r * 0.26, col);
@@ -503,7 +646,7 @@ function frecciona(cx, cy, r, s) {
 function coppa(cx, cy, r, s) {
   var pts = [];
   for (var i = 0; i <= 16; i++) { var t = Math.PI * i / 16; pts.push([cx + r * Math.cos(t), cy - s * r * 0.5 + s * r * Math.sin(t)]); }
-  evidenzia(pts, r * 0.26, s > 0 ? VERDE : ROSA);
+  evidenzia(pts, r * 0.26, s > 0 ? ROSSO_EV : AZZURRO);
 }
 function disegnaSfondo() {
   var g = this, F = g.F, id = g.id;
@@ -554,8 +697,16 @@ function segniSotto() {
     seme(2200 + i);
     linea(X(e.x), Gy0, X(e.x), Gy1, { col: ROSSO, lw: 1.3, passate: 1, dash: [9, 7], amp: 0.4, passo: 40 });
   });
+  S.orizz.forEach(function (y, i) {
+    var yy = Y(y);
+    if (yy < Gy0 || yy > Gy1) return;
+    seme(2250 + i);
+    linea(Gx0, yy - 3, Gx1, yy - 3, { col: ROSSO, lw: 1.4, passate: 1, dash: [10, 7], amp: 0.4, passo: 40 });
+    scrivi('y = ' + fmt(y), Gx1 - 10, yy - 12, 17, ROSSO, 0, 'right');
+  });
   var pS = S.prog.segno;
   if (pS === -INF) return;
+  terraETunnel(F, A, Math.min(B, pS));
   var y0 = Math.max(Gy0 - 6, Math.min(Gy1 + 6, Y(0)));
   riga(F, 'segno', A, B).segs.forEach(function (s, i) {
     if (!(s.s === 1 || s.s === -1) || s.a >= pS) return;
@@ -582,6 +733,7 @@ function segniSopra() {
     scrivi('flesso', x + 16, y + 26, 17, ROSSO);
   });
 }
+function larghezzaTavola(testo) { return larghezza(testo, 20) + 18; }
 function disegnaCartelli() {
   S.cartelli.forEach(function (c, i) {
     var k = Math.min(1, (CLOCK - c.t0) / 0.25), x = X(c.x) + c.lato * 3, y = Y(0);
@@ -590,11 +742,103 @@ function disegnaCartelli() {
     ctx.save();
     ctx.translate(x, y); ctx.scale(k, k);
     linea(0, 2, 0, -50, { col: '#8a5a2b', lw: 2.2 });
-    var w = larghezza(c.testo, 20) + 18, bx = c.lato > 0 ? -4 : -w + 4;
+    var w = larghezzaTavola(c.testo), bx = c.lato > 0 ? -4 : -w + 4;
     var tav = [[bx, -76], [bx + w, -78], [bx + w, -50], [bx, -48]];
     riempi(tav, 'rgba(255, 220, 120, 0.55)');
     tratto(tav, { chiuso: true, lw: 1.6, col: '#8a5a2b', passo: 9 });
     scrivi(c.testo, bx + w / 2, -56, 20, BLU, 0, 'center');
     ctx.restore();
   });
+}
+
+// ── Sotto terra: terriccio, il tunnel scavato dal carrello e la trivella ──
+var SASSI = (function () {
+  var R = rng(77), s = [];
+  for (var i = 0; i < 170; i++) s.push([R(), R(), 0.6 + R() * 2.4, R() * 3.14, R()]);
+  return s;
+})();
+/** I tratti di binario sotto il suolo (o appena sopra: lì il tunnel sbuca), già percorsi. */
+function tratteTunnel(F, A, B) {
+  var y0 = Y(0), tratte = [], cur = null;
+  if (B <= A) return tratte;
+  var n = Math.ceil((X(B) - X(A)) / 6);
+  for (var i = 0; i <= n; i++) {
+    var x = A + (B - A) * i / n, y = F.f(x), ys = Y(y);
+    var dentro = isFinite(ys) && ys > y0 - 30 && ys < Gy1 + 200 && ramoDi(F, x) >= 0;
+    if (dentro && cur && ramoDi(F, x) !== cur.ramo) dentro = false;
+    if (dentro) {
+      if (!cur) { cur = { ramo: ramoDi(F, x), pts: [] }; tratte.push(cur); }
+      cur.pts.push([X(x), ys]);
+    } else cur = null;
+  }
+  tratte = tratte.filter(function (t) { return t.pts.length > 1; });
+  tratte.forEach(function (t) {                     // il soffitto segue la normale al binario
+    var P = t.pts;
+    t.su = P.map(function (q, i) {
+      var a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)];
+      var tx = b[0] - a[0], ty = b[1] - a[1], L = Math.hypot(tx, ty) || 1, nx = ty / L, ny = -tx / L;
+      if (ny > 0) { nx = -nx; ny = -ny; }
+      return [nx, ny];
+    });
+  });
+  return tratte;
+}
+function soffitto(t, i, d) { return [t.pts[i][0] + t.su[i][0] * d, t.pts[i][1] + t.su[i][1] * d]; }
+function terraETunnel(F, A, B) {
+  var y0 = Y(0);
+  if (y0 >= Gy1) return;
+  var top = Math.max(Gy0 - 6, y0), tratte = tratteTunnel(F, A, B);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(Gx0 - 6, top, Gx1 - Gx0 + 12, Gy1 + 6 - top); ctx.clip();
+  ctx.beginPath(); ctx.rect(0, 0, VW, VH);
+  tratte.forEach(function (t) {                     // il vuoto del tunnel: dal binario fino al soffitto
+    t.pts.forEach(function (q, i) { var s = soffitto(t, i, 76); if (i) ctx.lineTo(s[0], s[1]); else ctx.moveTo(s[0], s[1]); });
+    for (var i = t.pts.length - 1; i >= 0; i--) { var s = soffitto(t, i, -5); ctx.lineTo(s[0], s[1]); }
+    ctx.closePath();
+  });
+  ctx.clip('evenodd');
+  ctx.fillStyle = 'rgba(176, 124, 72, 0.17)';
+  ctx.fillRect(Gx0 - 6, top, Gx1 - Gx0 + 12, Gy1 + 6 - top);
+  ctx.fillStyle = TERRA; ctx.strokeStyle = TERRA; ctx.lineWidth = 0.9;
+  var h = Gy1 + 6 - top, w = Gx1 - Gx0;
+  SASSI.forEach(function (s) {
+    var x = Gx0 + s[0] * w, y = top + 8 + s[1] * (h - 8);
+    ctx.globalAlpha = 0.28 + s[4] * 0.25;
+    ctx.beginPath();
+    if (s[4] > 0.7) { ctx.ellipse(x, y, s[2] * 2.2, s[2] * 1.4, s[3], 0, 7); ctx.stroke(); }
+    else { ctx.arc(x, y, s[2] * 0.7, 0, 7); ctx.fill(); }
+  });
+  ctx.globalAlpha = 1;
+  ctx.restore();
+  // pareti e puntelli di legno
+  ctx.save();
+  ctx.beginPath(); ctx.rect(Gx0 - 6, top, Gx1 - Gx0 + 12, Gy1 + 6 - top); ctx.clip();
+  tratte.forEach(function (t, k) {
+    seme(2700 + k);
+    tratto(t.pts.map(function (q, i) { return soffitto(t, i, 76); }), { col: TERRA, lw: 1.5, passo: 18, amp: 0.6 });
+    var fatta = 0;
+    t.pts.forEach(function (q, i) {                 // puntelli di legno, perpendicolari al binario
+      if (i && (fatta += Math.hypot(q[0] - t.pts[i - 1][0], q[1] - t.pts[i - 1][1])) < 110) return;
+      fatta = 0;
+      var b = soffitto(t, i, 2), c = soffitto(t, i, 74), n = t.su[i];
+      linea(b[0], b[1], c[0], c[1], { col: '#8a5a2b', lw: 1.8, passate: 1, amp: 0.5 });
+      linea(c[0] + n[1] * 11, c[1] - n[0] * 11, c[0] - n[1] * 11, c[1] + n[0] * 11, { col: '#8a5a2b', lw: 1.8, passate: 1, amp: 0.5 });
+    });
+  });
+  ctx.restore();
+}
+function trivella() {
+  var punta = [[21, -9], [48, -18.5], [24, -28]];
+  riempi(punta, 'rgba(150, 150, 165, 0.75)');
+  tratto(punta, { chiuso: true, lw: 1.5, col: '#3c3c48', passo: 6, amp: 0.5 });
+  ctx.strokeStyle = '#3c3c48'; ctx.lineWidth = 1.1; ctx.globalAlpha = 0.8;
+  for (var k = 0; k < 4; k++) {                    // la spirale che gira
+    var t = (CLOCK * 2.6 + k / 4) % 1, x = 22.5 + t * 24, hh = 9.5 * (1 - t);
+    ctx.beginPath(); ctx.moveTo(x, -18.5 - hh); ctx.lineTo(x + 4, -18.5 + hh); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  for (var j = 0; j < 5; j++) {                    // terriccio che vola
+    var u = (CLOCK * 1.7 + j * 0.21) % 1;
+    puntino(48 - u * 30 + Math.sin(j * 7) * 4, -18 - u * 22 * (j % 2 ? 1 : -0.6), 1.3 + (j % 3) * 0.5, TERRA);
+  }
 }
