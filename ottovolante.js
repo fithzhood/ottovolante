@@ -43,6 +43,7 @@ function impagina() {
   posaRiprendi();
   calcolaVista();
   preparaFondo();
+  S.cartelli.forEach(function (c) { c.off = undefined; c.corre = false; });   // cambio di finestra: i cartelli non corrono, si spostano
 }
 function calcolaVista() {
   var w = S.F.finestra;

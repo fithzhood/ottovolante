@@ -713,7 +713,7 @@ function libero(F, pts, z) {
   }
   for (var i = 0; i < pts.length; i++) {
     var p = pts[i];
-    if (Math.hypot(p[0] - z.S[0], p[1] - z.S[1]) < 85 || Math.hypot(p[0] - z.E[0], p[1] - z.E[1]) < 85) continue;   // stacco e atterraggio
+    if (Math.hypot(p[0] - z.S[0], p[1] - z.S[1]) < 85 || Math.hypot(p[0] - z.E[0], p[1] - z.E[1]) < 85) continue;   // stacco e atterraggio: lì le corregge il soffitto
     var c = curvaY(F, p[0]);
     if (isFinite(c) && p[0] > z.S[0] && p[0] < z.E[0] && !vicinoPiattaforma(z, p[0], c) && p[1] > c) return false;
     for (var j = 0; j < z.binario.length; j++) {
@@ -724,7 +724,26 @@ function libero(F, pts, z) {
   return true;
 }
 /** Attorno alle piattaforme le fiamme non ci sono (anche dove il binario è ripido). */
-function vicinoPiattaforma(z, x, y) { return Math.hypot(x - z.S[0], y - z.S[1]) < 62 || Math.hypot(x - z.E[0], y - z.E[1]) < 62; }
+function vicinoPiattaforma(z, x, y) { return Math.hypot(x - z.S[0], y - z.S[1]) < 92 || Math.hypot(x - z.E[0], y - z.E[1]) < 92; }
+function fiammeZona(F, z) {
+  if (z.fiamme) return z.fiamme;
+  z.fiamme = [];
+  for (var px = Math.max(X(z.a) + 2, Gx0); px <= Math.min(X(z.b) - 2, Gx1); px += 3) {
+    var y = curvaY(F, px);
+    if (!isFinite(y) || y < Gy0 - 40 || y > Gy1 + 40 || vicinoPiattaforma(z, px, y)) continue;
+    for (var hh = 0; hh <= FIAMMA_H; hh += 6) z.fiamme.push([px, y - hh]);
+  }
+  return z.fiamme;
+}
+/** La quota più bassa (y più grande) a cui un punto in x sta ad almeno r da tutte le fiamme della zona. */
+function cielo(F, z, x, r) {
+  var c = Infinity;
+  fiammeZona(F, z).forEach(function (q) {
+    var dx = Math.abs(q[0] - x);
+    if (dx < r) c = Math.min(c, q[1] - Math.sqrt(r * r - dx * dx));
+  });
+  return c;
+}
 function angolo(C, p) { var a = Math.atan2(p[1] - C[1], p[0] - C[0]); return a < -Math.PI / 2 ? a + 2 * Math.PI : a; }
 /** Il rampino. Prima scelta: il ramo sta dentro il quaderno; l'omino salta dalla piattaforma, afferra la fune
  *  al volo, si dondola e la lascia atterrando sull'altra piattaforma. Se non c'è modo, il vecchio dondolo
@@ -733,12 +752,18 @@ function pianoLiana(F, z) {
   var corpo = 52 * OMINO, S0 = z.S, E0 = z.E, scelta = null;
   function arco(C, R, a0, a1, n) {
     var pts = [];
-    for (var i = 0; i <= n; i++) { var a = lerp(a0, a1, i / n); pts.push([C[0] + Math.cos(a) * R, C[1] + Math.sin(a) * R]); }
+    for (var i = 0; i <= n; i++) {
+      var a = lerp(a0, a1, i / n), c = Math.cos(a), s = Math.sin(a);
+      pts.push([C[0] + c * R, C[1] + s * R]);
+    }
     return pts;
   }
   function volo(A, B, hj, n) {
     var pts = [];
-    for (var i = 0; i <= n; i++) { var u = i / n; pts.push([lerp(A[0], B[0], u), lerp(A[1], B[1], u) - 4 * hj * u * (1 - u)]); }
+    for (var i = 0; i <= n; i++) {
+      var u = i / n, p = [lerp(A[0], B[0], u), lerp(A[1], B[1], u) - 4 * hj * u * (1 - u)];
+      pts.push(p, [p[0], p[1] - corpo / 2], [p[0], p[1] - corpo]);
+    }
     return pts;
   }
   // 1) presa al volo, con il ramo in vista
@@ -771,9 +796,10 @@ function pianoLiana(F, z) {
       var a0 = angolo(C2, S0), a1 = angolo(C2, E0);
       if (libero(F, arco(C2, R2, a0, a1, 50), z)) scelta = { C: C2, R: R2, aA: a0, aE: a1, A: null };
     }
-    if (!scelta) { R2 = (c * c / 4 + 9) / 6; C2 = [M[0] + n[0] * (3 - R2), M[1] + n[1] * (3 - R2)]; scelta = { C: C2, R: R2, aA: angolo(C2, S0), aE: angolo(C2, E0), A: null }; }
+    if (!scelta) { R2 = (c * c / 4 + 9) / 6; C2 = [M[0] + n[0] * (3 - R2), M[1] + n[1] * (3 - R2)]; scelta = { C: C2, R: R2, aA: angolo(C2, S0), aE: angolo(C2, E0), A: null, riserva: true }; }
   }
   z.buono = true;
+  z.modo = scelta.A ? 'volo' : scelta.riserva ? 'riserva' : 'cerchio';
   z.C = scelta.C; z.R = scelta.R; z.Rh = scelta.R - corpo; z.a0 = scelta.aA; z.a1 = scelta.aE;
   var sv = scelta.A ? volo(S0, scelta.A, scelta.hj, 20) : [], lv = 0;
   for (var q = 1; q < sv.length; q++) lv += Math.hypot(sv[q][0] - sv[q - 1][0], sv[q][1] - sv[q - 1][1]);
@@ -782,8 +808,9 @@ function pianoLiana(F, z) {
   z.t1 = lv / (lv + la);
   z.stato = function (t) {
     if (scelta.A && t < z.t1) {                       // in volo verso la fune
-      var u = t / z.t1, A = scelta.A;
-      return { P: [lerp(S0[0], A[0], u), lerp(S0[1], A[1], u) - 4 * scelta.hj * u * (1 - u)], an: null, u: u };
+      var u = t / z.t1, A = scelta.A, px = lerp(S0[0], A[0], u), py = lerp(S0[1], A[1], u) - 4 * scelta.hj * u * (1 - u);
+      py = Math.min(py, cielo(F, z, px, CL) + 26 * OMINO);   // le anche ad almeno CL dalle fiamme
+      return { P: [px, py], an: null, u: u };
     }
     var v = scelta.A ? (t - z.t1) / (1 - z.t1) : t, an = lerp(z.a0, z.a1, v);
     return { P: [z.C[0] + Math.cos(an) * z.R, z.C[1] + Math.sin(an) * z.R], an: an };
@@ -807,6 +834,14 @@ function pianoAsta(F, z) {
   }
   z.buono = !!scelto;
   scelto = scelto || sicuro || primo || pianoSalto(P0, Ec, (P0[0] + Ec[0]) / 2, Math.max(Gy0 + 40, top - CL));
+  if (scelto) {
+    var st0 = scelto.stato;
+    scelto.stato = function (t) {
+      var s = st0(t), c = cielo(F, z, s.P[0], CL);
+      if (s.P[1] > c) s.P = [s.P[0], c];
+      return s;
+    };
+  }
   z.asta = scelto; z.len = scelto ? scelto.len : 100;
   z.punto = function (t) { return z.asta.stato(t).P; };
 }
@@ -1246,6 +1281,7 @@ function segniSotto() {
   var pS = finoA('segno');
   if (pS === -INF) return;
   terraETunnel(F, A, Math.min(B, pS));
+  if (!S.giro || S.giro.id !== 'segno') return;     // le cancellazioni del segno si vedono solo nel suo giro
   var y0 = Math.max(Gy0 - 6, Math.min(Gy1 + 6, Y(0)));
   riga(F, 'segno', A, B).segs.forEach(function (s, i) {
     if (!(s.s === 1 || s.s === -1) || s.a >= pS) return;
