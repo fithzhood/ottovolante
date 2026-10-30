@@ -145,8 +145,8 @@ function disegnaAssi() {
   }
   if (x0 > Gx0 && x0 < Gx1 && y0 > Gy0 && y0 < Gy1) scrivi('0', x0 - 8, y0 + 19, lab, MATITA, 0, 'right');
   if (zoomato) {
-    var rz = Math.round(S.zoom.z > 1 ? S.zoom.z : 1 / S.zoom.z);
-    var et = (S.zoom.z > 1 ? 'ingrandimento ×' : 'vista allontanata ×') + (rz >= 1000 ? fmtQuota(rz) : fmt(rz));
+    var rz = S.zoom.z > 1 ? S.zoom.z : 1 / S.zoom.z;
+    var et = (S.zoom.z > 1 ? 'ingrandimento ×' : 'vista allontanata ×') + (rz >= 1000 ? fmtQuota(rz) : rz >= 10 ? fmt(Math.round(rz)) : fmt(rz, 1));
     var lw = larghezza(et, 16) + 16;
     ctx.save(); ctx.globalCompositeOperation = 'source-over';
     riempi(rettangolo(Gx1 - lw - 6, Gy1 - 30, lw, 26, 8), CARTA, 0.92);

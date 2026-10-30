@@ -46,14 +46,15 @@ function bordiPortale(F, x0) {
 function Portale(x0) {
   return Tween(2.2, function (g, p) {
     p.ab = bordiPortale(g.F, x0);
-    g.portali = (g.portali || []).concat([{ a: p.ab[0], b: p.ab[1], t0: CLOCK }]);
+    p.q = { a: p.ab[0], b: p.ab[1], t0: CLOCK };
+    g.portali = (g.portali || []).concat([p.q]);
   }, function (g, u, p) {
     var W = g.W;
     if (u < 0.42) { W.x = p.ab[0]; W.portale = 1 - u / 0.42; }
     else if (u < 0.58) { W.x = p.ab[1]; W.portale = 0; }
     else { W.x = p.ab[1]; W.portale = (u - 0.58) / 0.42; }
     W.y = g.F.f(W.x);
-    if (u >= 1) W.portale = undefined;
+    if (u >= 1) { W.portale = undefined; p.q.fine = CLOCK; }
   });
 }
 function angoloBinario(F, x) { return Math.atan2(-pendenza(F, x) * sy, sx); }
@@ -684,9 +685,14 @@ function pianoConcavita(g) {
       if (i === 0) x += 1e-6 * Math.max(1, Math.abs(x));
       if (i === n) x -= 1e-6 * Math.max(1, Math.abs(x));
       q = Y(F.f(x));
-      var ok = isFinite(q) && q > Gy0 + 14 && q < Gy1 - 10 && X(x) > Gx0 + 24 && X(x) < Gx1 - 24;
+      var ok = isFinite(q) && q > Gy0 + 52 * OMINO + 22 && q < Gy1 - 10 && X(x) > Gx0 + 24 && X(x) < Gx1 - 24;
       if (ok) { if (!run) run = [x, x]; else run[1] = x; }
       if (!ok || i === n) { if (run && (!best || X(run[1]) - X(run[0]) > X(best[1]) - X(best[0]))) best = run; run = null; }
+    }
+    if (g.fissi) {                                     // con la vista allontanata le piattaforme restano dov'erano
+      var fx = g.fissi.filter(function (f) { return f.a === z.a; })[0];
+      if (!fx) return;
+      best = [fx.xa, fx.xb];
     }
     if (!best || X(best[1]) - X(best[0]) < 40) return;
     var zz = { a: z.a, b: z.b, s: z.s, xa: best[0], xb: best[1],
@@ -720,24 +726,69 @@ function libero(F, pts, z) {
 /** Attorno alle piattaforme le fiamme non ci sono (anche dove il binario è ripido). */
 function vicinoPiattaforma(z, x, y) { return Math.hypot(x - z.S[0], y - z.S[1]) < 62 || Math.hypot(x - z.E[0], y - z.E[1]) < 62; }
 function angolo(C, p) { var a = Math.atan2(p[1] - C[1], p[0] - C[0]); return a < -Math.PI / 2 ? a + 2 * Math.PI : a; }
+/** Il rampino. Prima scelta: il ramo sta dentro il quaderno; l'omino salta dalla piattaforma, afferra la fune
+ *  al volo, si dondola e la lascia atterrando sull'altra piattaforma. Se non c'è modo, il vecchio dondolo
+ *  da piattaforma a piattaforma (con il ramo dove capita: ci penserà la vista ad allontanarsi). */
 function pianoLiana(F, z) {
-  var S0 = z.S, E0 = z.E, dx = E0[0] - S0[0], dy = E0[1] - S0[1], c = Math.hypot(dx, dy);
-  var M = [(S0[0] + E0[0]) / 2, (S0[1] + E0[1]) / 2], n = [-dy / c, dx / c], corpo = 52 * OMINO, scelta = null, h, R, C;
-  if (n[1] < 0) n = [-n[0], -n[1]];                  // verso il basso dello schermo: verso il binario
-  function prova(h) {
-    var R = (c * c / 4 + h * h) / (2 * h);
-    if (R < corpo + 50) return null;
-    var C = [M[0] + n[0] * (h - R), M[1] + n[1] * (h - R)], a0 = angolo(C, S0), a1 = angolo(C, E0), pts = [];
-    for (var i = 0; i <= 50; i++) { var a = lerp(a0, a1, i / 50); pts.push([C[0] + Math.cos(a) * R, C[1] + Math.sin(a) * R]); }
-    return libero(F, pts, z) ? { C: C, R: R, a0: a0, a1: a1 } : null;
+  var corpo = 52 * OMINO, S0 = z.S, E0 = z.E, scelta = null;
+  function arco(C, R, a0, a1, n) {
+    var pts = [];
+    for (var i = 0; i <= n; i++) { var a = lerp(a0, a1, i / n); pts.push([C[0] + Math.cos(a) * R, C[1] + Math.sin(a) * R]); }
+    return pts;
   }
-  // l'arco più incavato che non tocca le fiamme: è il dondolo più ampio, con la fune più corta
-  for (h = c * 0.5; h >= 3 && !scelta; h *= 0.9) scelta = prova(h);
-  if (!scelta) { h = 3; R = (c * c / 4 + 9) / 6; C = [M[0] + n[0] * (h - R), M[1] + n[1] * (h - R)]; scelta = { C: C, R: R, a0: angolo(C, S0), a1: angolo(C, E0) }; }
-  z.buono = !!scelta && h > 3;
-  z.C = scelta.C; z.R = scelta.R; z.a0 = scelta.a0; z.a1 = scelta.a1; z.Rh = scelta.R - corpo;
-  z.len = scelta.R * Math.abs(scelta.a1 - scelta.a0);
-  z.punto = function (t) { var a = lerp(z.a0, z.a1, t); return [z.C[0] + Math.cos(a) * z.R, z.C[1] + Math.sin(a) * z.R]; };
+  function volo(A, B, hj, n) {
+    var pts = [];
+    for (var i = 0; i <= n; i++) { var u = i / n; pts.push([lerp(A[0], B[0], u), lerp(A[1], B[1], u) - 4 * hj * u * (1 - u)]); }
+    return pts;
+  }
+  // 1) presa al volo, con il ramo in vista
+  var top = Gy0 + 30, xs = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8];
+  for (var cy = top; cy < Math.min(S0[1], E0[1]) - 40 && !scelta; cy += 12) {
+    for (var k = 0; k < xs.length && !scelta; k++) {
+      var C = [lerp(S0[0], E0[0], xs[k]), cy], R = Math.hypot(E0[0] - C[0], E0[1] - C[1]);
+      if (R < corpo + 40 || C[0] - 32 < Gx0 + 2 || C[0] + 32 > Gx1 - 2) continue;
+      var aE = angolo(C, E0);
+      for (var aA = Math.PI - 0.05; aA > aE + 0.35 && !scelta; aA -= 0.05) {
+        var A = [C[0] + Math.cos(aA) * R, C[1] + Math.sin(aA) * R];
+        if (A[0] < S0[0] + 30 || A[1] > Gy1 - 10) continue;
+        if (!libero(F, arco(C, R, aA, aE, 40), z)) continue;
+        for (var hj = 30; hj <= 110 && !scelta; hj += 40) {
+          if (Math.min(S0[1], A[1]) - hj < Gy0 + corpo + 10) continue;
+          if (libero(F, volo(S0, A, hj, 30), z)) scelta = { C: C, R: R, aA: aA, aE: aE, A: A, hj: hj };
+        }
+      }
+    }
+  }
+  // 2) il vecchio dondolo da piattaforma a piattaforma
+  if (!scelta) {
+    var dx = E0[0] - S0[0], dy = E0[1] - S0[1], c = Math.hypot(dx, dy), h, R2, C2;
+    var M = [(S0[0] + E0[0]) / 2, (S0[1] + E0[1]) / 2], n = [-dy / c, dx / c];
+    if (n[1] < 0) n = [-n[0], -n[1]];
+    for (h = c * 0.5; h >= 3 && !scelta; h *= 0.9) {
+      R2 = (c * c / 4 + h * h) / (2 * h);
+      if (R2 < corpo + 50) continue;
+      C2 = [M[0] + n[0] * (h - R2), M[1] + n[1] * (h - R2)];
+      var a0 = angolo(C2, S0), a1 = angolo(C2, E0);
+      if (libero(F, arco(C2, R2, a0, a1, 50), z)) scelta = { C: C2, R: R2, aA: a0, aE: a1, A: null };
+    }
+    if (!scelta) { R2 = (c * c / 4 + 9) / 6; C2 = [M[0] + n[0] * (3 - R2), M[1] + n[1] * (3 - R2)]; scelta = { C: C2, R: R2, aA: angolo(C2, S0), aE: angolo(C2, E0), A: null }; }
+  }
+  z.buono = true;
+  z.C = scelta.C; z.R = scelta.R; z.Rh = scelta.R - corpo; z.a0 = scelta.aA; z.a1 = scelta.aE;
+  var sv = scelta.A ? volo(S0, scelta.A, scelta.hj, 20) : [], lv = 0;
+  for (var q = 1; q < sv.length; q++) lv += Math.hypot(sv[q][0] - sv[q - 1][0], sv[q][1] - sv[q - 1][1]);
+  var la = scelta.R * Math.abs(scelta.aE - scelta.aA);
+  z.len = lv + la;
+  z.t1 = lv / (lv + la);
+  z.stato = function (t) {
+    if (scelta.A && t < z.t1) {                       // in volo verso la fune
+      var u = t / z.t1, A = scelta.A;
+      return { P: [lerp(S0[0], A[0], u), lerp(S0[1], A[1], u) - 4 * scelta.hj * u * (1 - u)], an: null, u: u };
+    }
+    var v = scelta.A ? (t - z.t1) / (1 - z.t1) : t, an = lerp(z.a0, z.a1, v);
+    return { P: [z.C[0] + Math.cos(an) * z.R, z.C[1] + Math.sin(an) * z.R], an: an };
+  };
+  z.punto = function (t) { return z.stato(t).P; };
 }
 function pianoAsta(F, z) {
   var h0 = 26 * OMINO, P0 = [z.S[0], z.S[1] - h0], Ec = [z.E[0], z.E[1] - h0], top = Math.min(P0[1], Ec[1]), i, scelto = null, primo = null, sicuro = null;
@@ -792,7 +843,15 @@ function campioniSalto(p) {
 
 function attrezzoDi(s) { return s > 0 ? 'il rampino: concavità verso l’alto' : 'l’asta: concavità verso il basso'; }
 COSTRUTTORI.concavita = function (g, F) {
-  var P = g.passi, Z = pianoConcavita(g);
+  var P = g.passi, Z = null;
+  var cx = (visA() + visB()) / 2, cy = (oy - (Gy0 + Gy1) / 2) / sy;
+  S.zoom = zoomBase();
+  g.fissi = pianoConcavita(g).map(function (z) { return { a: z.a, xa: z.xa, xb: z.xb }; });
+  [1, 0.9, 0.8, 0.7, 0.62, 0.55, 0.48, 0.42, 0.36, 0.31, 0.27, 0.23, 0.2].some(function (z) {
+    S.zoom = z === 1 ? zoomBase() : { z: z, x0: cx, y0: cy, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 };
+    Z = pianoConcavita(g);
+    return inQuadro(puntiConcavita(Z));
+  });
   g.piano = Z; g.att = null; g.lasciato = null; g.chiaveVista = chiaveVista();
   if (!Z.length) { P.push(Fai(fine), Di('W', 'Qui il binario esce dal quaderno: la concavità è nella tabella', true)); return; }
   g.W.x = Z[0].xa;
@@ -832,7 +891,27 @@ function puntoSalto(a) {
   return [lerp(A[0], B[0], u), lerp(A[1], B[1], u) - 120 * Math.sin(Math.PI * u)];
 }
 /** La geometria è in pixel: se la finestra cambia misura, si ricalcola sugli stessi oggetti. */
-function chiaveVista() { return [sx, sy, ox, oy, Gx0, Gx1, Gy0, Gy1].join(','); }
+function chiaveVista() { var z = S.zoom; return [sx, sy, ox, oy, Gx0, Gx1, Gy0, Gy1, z.z, z.x0, z.y0, z.px, z.py].join(','); }
+/** Tutto quello che deve vedersi nel giro della concavità: piattaforme, omino, ramo, pavimento, salti. */
+function puntiConcavita(Z) {
+  var pts = [], h0 = 26 * OMINO;
+  Z.forEach(function (z) {
+    pts.push(z.S, [z.S[0], z.S[1] - 2 * h0 - 8], z.E, [z.E[0], z.E[1] - 2 * h0 - 8]);
+    if (z.s > 0 && z.C) {
+      pts.push([z.C[0] - 30, z.C[1] - 12], [z.C[0] + 30, z.C[1] - 12]);
+      var mano = [z.S[0] + 9 * OMINO, z.S[1] - 47 * OMINO];
+      pts.push([(mano[0] + z.C[0]) / 2, (mano[1] + z.C[1]) / 2 - 50]);
+    } else if (z.s < 0 && z.asta) {
+      var J = z.asta;
+      pts.push([J.Q[0] - 38, J.Q[1] + 12], [J.Q[0] + 38, J.Q[1] + 12], [z.S[0] + 9 * OMINO + 90, z.S[1] - 26 * OMINO - 30]);
+      campioniSalto(J).forEach(function (p) { pts.push(p); });
+    }
+  });
+  return pts;
+}
+function inQuadro(pts) {
+  return pts.every(function (p) { return p[0] >= Gx0 + 2 && p[0] <= Gx1 - 2 && p[1] >= Gy0 + 2 && p[1] <= Gy1 - 2; });
+}
 function aggiornaPiano(g) {
   if (!g.piano || g.chiaveVista === chiaveVista()) return;
   g.chiaveVista = chiaveVista();
@@ -944,9 +1023,16 @@ function scenaConcavita(g) {
     return;
   }
   if (a.fase === 'liana') {                           // fune di lunghezza fissa, appesa al ramo
-    var an = lerp(z.a0, z.a1, a.t), H = [z.C[0] + Math.cos(an) * z.Rh, z.C[1] + Math.sin(an) * z.Rh];
+    var stl = z.stato(a.t);
     ramo(z.C);
     rampino(z.C[0], z.C[1] + 4, Math.PI / 2);
+    if (stl.an === null) {                            // salta verso la fune, che pende un po' molle
+      var pv = stl.P, mano = [pv[0] + 8, pv[1] - 44 * OMINO], mz = [(z.C[0] + mano[0]) / 2 + 10, Math.max(z.C[1], mano[1]) + 30];
+      tratto([z.C, mz, mano], { col: VERDE_INK, lw: 1.6, passo: 10 });
+      omino(pv[0], pv[1], { posa: stl.u > 0.7 ? 'lancia' : 'raccolto' });
+      return;
+    }
+    var an = stl.an, H = [z.C[0] + Math.cos(an) * z.Rh, z.C[1] + Math.sin(an) * z.Rh];
     tratto([z.C, H], { col: VERDE_INK, lw: 1.8, passo: 10 });
     appeso(H, an);
     return;
@@ -985,8 +1071,9 @@ function ancoraConcavita(g) {
   else if (a.fase === 'portale') { var pq = a.u < 0.5 ? a.da.E : a.a.S; pts = [pq, [pq[0], pq[1] - 2 * h0 - 8]]; }
   else if (a.fase === 'lancio' || a.fase === 'rincorsa') pts = [a.z.S, [a.z.S[0], a.z.S[1] - 2 * h0 - 8]];
   else if (a.fase === 'liana') {
-    var z = a.z, an = lerp(z.a0, z.a1, a.t);
-    pts = [[z.C[0] + Math.cos(an) * z.Rh, z.C[1] + Math.sin(an) * z.Rh], [z.C[0] + Math.cos(an) * z.R, z.C[1] + Math.sin(an) * z.R]];
+    var z = a.z, stl = z.stato(a.t);
+    if (stl.an === null) pts = [stl.P, [stl.P[0], stl.P[1] - 2 * h0]];
+    else pts = [[z.C[0] + Math.cos(stl.an) * z.Rh, z.C[1] + Math.sin(stl.an) * z.Rh], stl.P];
   } else { var P = a.z.asta.stato(a.t).P; pts = [[P[0] - h0, P[1] - h0], [P[0] + h0, P[1] + h0]]; }
   var x0 = Math.min(pts[0][0], pts[1][0]) - 20, x1 = Math.max(pts[0][0], pts[1][0]) + 20;
   var y0 = Math.min(pts[0][1], pts[1][1]) - 6, y1 = Math.max(pts[0][1], pts[1][1]) + 4;
@@ -1030,8 +1117,10 @@ function disegnaAttori() {
 
   var ang = g.W.hop ? 0 : Math.atan2(-pendenza(F, g.W.x) * sy, sx);
   if (g.id === 'derivata' && g.bers) bersaglio(g.bers, F);
-  (g.portali || []).forEach(function (q) {
+  g.portali = (g.portali || []).filter(function (q) { return !q.fine || CLOCK - q.fine < 0.4; });
+  g.portali.forEach(function (q) {
     var ap = Math.min(1, (CLOCK - q.t0) / 0.35);
+    if (q.fine) ap = Math.min(ap, 1 - (CLOCK - q.fine) / 0.35);   // usato: si richiude
     portale([X(q.a), Y(F.f(q.a))], angoloBinario(F, q.a), ARANCIO, ap);
     portale([X(q.b), Y(F.f(q.b))], angoloBinario(F, q.b), CIANO, ap);
   });
