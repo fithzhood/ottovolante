@@ -735,14 +735,19 @@ function fiammeZona(F, z) {
   }
   return z.fiamme;
 }
-/** La quota più bassa (y più grande) a cui un punto in x sta ad almeno r da tutte le fiamme della zona. */
-function cielo(F, z, x, r) {
-  var c = Infinity;
-  fiammeZona(F, z).forEach(function (q) {
-    var dx = Math.abs(q[0] - x);
-    if (dx < r) c = Math.min(c, q[1] - Math.sqrt(r * r - dx * dx));
-  });
-  return c;
+/** Il punto P spostato il minimo indispensabile per stare ad almeno r da tutte le fiamme della zona:
+ *  lo si spinge via dalla fiamma più vicina (funziona anche contro le pareti ripide, non solo dall'alto). */
+function lontanoDalleFiamme(F, z, P, r) {
+  var p = [P[0], P[1]], fl = fiammeZona(F, z);
+  for (var giro = 0; giro < 6; giro++) {
+    var best = null, dmin = r;
+    fl.forEach(function (q) { var d = Math.hypot(p[0] - q[0], p[1] - q[1]); if (d < dmin) { dmin = d; best = q; } });
+    if (!best) break;
+    var dx = p[0] - best[0], dy = p[1] - best[1], d = Math.hypot(dx, dy) || 1;
+    if (d < 0.5) { dx = 0; dy = -1; d = 1; }
+    p = [best[0] + dx / d * (r + 0.5), best[1] + dy / d * (r + 0.5)];
+  }
+  return p;
 }
 function angolo(C, p) { var a = Math.atan2(p[1] - C[1], p[0] - C[0]); return a < -Math.PI / 2 ? a + 2 * Math.PI : a; }
 /** Il rampino. Prima scelta: il ramo sta dentro il quaderno; l'omino salta dalla piattaforma, afferra la fune
@@ -766,17 +771,48 @@ function pianoLiana(F, z) {
     }
     return pts;
   }
+  // come un pendolo vero: il ramo sta sopra il punto più basso del tratto, dove la fune scende a piombo
+  var fondo = S0[0], yf = -Infinity;
+  for (var px = S0[0]; px <= E0[0]; px += 2) { var cyy = curvaY(F, px); if (isFinite(cyy) && cyy > yf) { yf = cyy; fondo = px; } }
+  var interno0 = fondo - S0[0] > 0.12 * (E0[0] - S0[0]) && E0[0] - fondo > 0.12 * (E0[0] - S0[0]);   // il fondo è dentro il tratto
+  // 0) alla Tarzan: il ramo sta sopra il fondo; salto, presa, dondolo, salto sull'altra piattaforma
+  var yFiamma = Infinity;
+  fiammeZona(F, z).forEach(function (q) { if (Math.abs(q[0] - fondo) < 50) yFiamma = Math.min(yFiamma, q[1]); });
+  if (!isFinite(yFiamma)) yFiamma = curvaY(F, fondo) - FIAMMA_H;
+  for (var cy0 = Gy0 + 30; cy0 < Math.min(S0[1], E0[1]) - 30 && !scelta; cy0 += 12) {
+    var C0 = [fondo, cy0], R0 = yFiamma - CL - cy0;
+    if (R0 < corpo + 30 || C0[0] - 32 < Gx0 + 2 || C0[0] + 32 > Gx1 - 2) continue;
+    for (var aA0 = Math.PI / 2 + 0.35; aA0 < Math.PI - 0.15 && !scelta; aA0 += 0.05) {
+      var aB0 = Math.PI - aA0, A0 = [C0[0] + Math.cos(aA0) * R0, C0[1] + Math.sin(aA0) * R0], B0 = [C0[0] + Math.cos(aB0) * R0, C0[1] + Math.sin(aB0) * R0];
+      if (A0[0] < S0[0] + 20 || B0[0] > E0[0] - 20) continue;
+      if (!libero(F, arco(C0, R0, aA0, aB0, 40), z)) continue;
+      for (var hj0 = 30; hj0 <= 110 && !scelta; hj0 += 40) {
+        if (Math.min(S0[1], A0[1], E0[1], B0[1]) - hj0 < Gy0 + corpo + 10) continue;
+        if (libero(F, volo(S0, A0, hj0, 30), z) && libero(F, volo(B0, E0, hj0, 30), z))
+          scelta = { C: C0, R: R0, aA: aA0, aE: aB0, A: A0, B: B0, hj: hj0 };
+      }
+    }
+  }
   // 1) presa al volo, con il ramo in vista
-  var top = Gy0 + 30, xs = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8];
+  var xs = [0, -15, 15, -30, 30, -50, 50].map(function (d) { return Math.max(S0[0] + 20, Math.min(E0[0], fondo + d)); });
+  var top = Gy0 + 30;
   for (var cy = top; cy < Math.min(S0[1], E0[1]) - 40 && !scelta; cy += 12) {
     for (var k = 0; k < xs.length && !scelta; k++) {
-      var C = [lerp(S0[0], E0[0], xs[k]), cy], R = Math.hypot(E0[0] - C[0], E0[1] - C[1]);
+      var C = [xs[k], cy], R = Math.hypot(E0[0] - C[0], E0[1] - C[1]);
       if (R < corpo + 40 || C[0] - 32 < Gx0 + 2 || C[0] + 32 > Gx1 - 2) continue;
       var aE = angolo(C, E0);
-      for (var aA = Math.PI - 0.05; aA > aE + 0.35 && !scelta; aA -= 0.05) {
+      // la presa sta sempre prima del fondo (a sinistra del ramo): prima il punto più vicino alla piattaforma
+      // di partenza (se la fune ci arriva, niente salto), poi il simmetrico dell'arrivo, poi gli altri
+      var aS = angolo(C, S0), angoli = [], m = Math.PI - aE;
+      if (Math.abs(Math.hypot(S0[0] - C[0], S0[1] - C[1]) - R) < 0.06 * R) angoli.push(aS);
+      for (var dd = 0; dd < 3; dd += 0.05) { angoli.push(m - dd); if (dd) angoli.push(m + dd); }
+      angoli = angoli.filter(function (x) { return (interno0 ? x > Math.PI / 2 + 0.25 && x > aE + 0.6 : x > aE + 0.35) && x < Math.PI - 0.05; });
+      for (var ia = 0; ia < angoli.length && !scelta; ia++) {
+        var aA = angoli[ia];
         var A = [C[0] + Math.cos(aA) * R, C[1] + Math.sin(aA) * R];
         if (A[0] < S0[0] + 30 || A[1] > Gy1 - 10) continue;
         if (!libero(F, arco(C, R, aA, aE, 40), z)) continue;
+        if (Math.hypot(A[0] - S0[0], A[1] - S0[1]) < 0.06 * R && libero(F, arco(C, R, aA, aE, 40), z)) { scelta = { C: C, R: R, aA: aA, aE: aE, A: null }; break; }
         for (var hj = 30; hj <= 110 && !scelta; hj += 40) {
           if (Math.min(S0[1], A[1]) - hj < Gy0 + corpo + 10) continue;
           if (libero(F, volo(S0, A, hj, 30), z)) scelta = { C: C, R: R, aA: aA, aE: aE, A: A, hj: hj };
@@ -798,21 +834,28 @@ function pianoLiana(F, z) {
     }
     if (!scelta) { R2 = (c * c / 4 + 9) / 6; C2 = [M[0] + n[0] * (3 - R2), M[1] + n[1] * (3 - R2)]; scelta = { C: C2, R: R2, aA: angolo(C2, S0), aE: angolo(C2, E0), A: null, riserva: true }; }
   }
+  // il ramo non sta (più o meno) sopra il fondo; conta solo se il fondo è dentro il tratto, non a un capo
+  z.storto = interno0 && Math.abs(scelta.C[0] - fondo) > 0.2 * (E0[0] - S0[0]);
   z.buono = true;
   z.modo = scelta.A ? 'volo' : scelta.riserva ? 'riserva' : 'cerchio';
   z.C = scelta.C; z.R = scelta.R; z.Rh = scelta.R - corpo; z.a0 = scelta.aA; z.a1 = scelta.aE;
-  var sv = scelta.A ? volo(S0, scelta.A, scelta.hj, 20) : [], lv = 0;
-  for (var q = 1; q < sv.length; q++) lv += Math.hypot(sv[q][0] - sv[q - 1][0], sv[q][1] - sv[q - 1][1]);
+  function lungo(pts) { var l = 0; for (var q = 3; q < pts.length; q += 3) l += Math.hypot(pts[q][0] - pts[q - 3][0], pts[q][1] - pts[q - 3][1]); return l; }   // solo i piedi
+  var lv = scelta.A ? lungo(volo(S0, scelta.A, scelta.hj, 20)) : 0, lb = scelta.B ? lungo(volo(scelta.B, E0, scelta.hj, 20)) : 0;
   var la = scelta.R * Math.abs(scelta.aE - scelta.aA);
-  z.len = lv + la;
-  z.t1 = lv / (lv + la);
+  z.len = lv + la + lb;
+  z.t1 = lv / z.len; z.t2 = (lv + la) / z.len; z.B = scelta.B;
   z.stato = function (t) {
     if (scelta.A && t < z.t1) {                       // in volo verso la fune
       var u = t / z.t1, A = scelta.A, px = lerp(S0[0], A[0], u), py = lerp(S0[1], A[1], u) - 4 * scelta.hj * u * (1 - u);
-      py = Math.min(py, cielo(F, z, px, CL) + 26 * OMINO);   // le anche ad almeno CL dalle fiamme
-      return { P: [px, py], an: null, u: u };
+      var anca = lontanoDalleFiamme(F, z, [px, py - 26 * OMINO], CL);   // le anche ad almeno CL dalle fiamme
+      return { P: [anca[0], anca[1] + 26 * OMINO], an: null, u: u };
     }
-    var v = scelta.A ? (t - z.t1) / (1 - z.t1) : t, an = lerp(z.a0, z.a1, v);
+    if (scelta.B && t > z.t2) {                       // lasciata la fune, il salto sull'altra piattaforma
+      var w2 = (t - z.t2) / (1 - z.t2), B = scelta.B, qx = lerp(B[0], E0[0], w2), qy = lerp(B[1], E0[1], w2) - 4 * scelta.hj * w2 * (1 - w2);
+      var anca2 = lontanoDalleFiamme(F, z, [qx, qy - 26 * OMINO], CL);
+      return { P: [anca2[0], anca2[1] + 26 * OMINO], an: null, u: 1, dopo: w2 };
+    }
+    var v = scelta.A ? (t - z.t1) / ((scelta.B ? z.t2 : 1) - z.t1) : t, an = lerp(z.a0, z.a1, v);
     return { P: [z.C[0] + Math.cos(an) * z.R, z.C[1] + Math.sin(an) * z.R], an: an };
   };
   z.punto = function (t) { return z.stato(t).P; };
@@ -837,8 +880,8 @@ function pianoAsta(F, z) {
   if (scelto) {
     var st0 = scelto.stato;
     scelto.stato = function (t) {
-      var s = st0(t), c = cielo(F, z, s.P[0], CL);
-      if (s.P[1] > c) s.P = [s.P[0], c];
+      var s = st0(t);
+      s.P = lontanoDalleFiamme(F, z, s.P, CL);
       return s;
     };
   }
@@ -882,11 +925,18 @@ COSTRUTTORI.concavita = function (g, F) {
   var cx = (visA() + visB()) / 2, cy = (oy - (Gy0 + Gy1) / 2) / sy;
   S.zoom = zoomBase();
   g.fissi = pianoConcavita(g).map(function (z) { return { a: z.a, xa: z.xa, xb: z.xb }; });
-  [1, 0.9, 0.8, 0.7, 0.62, 0.55, 0.48, 0.42, 0.36, 0.31, 0.27, 0.23, 0.2].some(function (z) {
-    S.zoom = z === 1 ? zoomBase() : { z: z, x0: cx, y0: cy, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 };
+  // la vista più vicina in cui si vede tutto e ogni ramo sta sopra il fondo del suo tratto;
+  // se non c'è, la più vicina in cui almeno si vede tutto
+  var zooms = [1, 0.9, 0.8, 0.7, 0.62, 0.55, 0.48, 0.42, 0.36, 0.31, 0.27, 0.23, 0.2], ripiego = null;
+  function vista(z) { return z === 1 ? zoomBase() : { z: z, x0: cx, y0: cy, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 }; }
+  var trovata = zooms.some(function (z) {
+    S.zoom = vista(z);
     Z = pianoConcavita(g);
-    return inQuadro(puntiConcavita(Z));
+    if (!inQuadro(puntiConcavita(Z))) return false;
+    if (ripiego === null) ripiego = z;
+    return Z.every(function (q) { return !q.storto; }) || z < (ripiego || 1) * 0.6;
   });
+  if (!trovata && ripiego !== null) { S.zoom = vista(ripiego); Z = pianoConcavita(g); }
   g.piano = Z; g.att = null; g.lasciato = null; g.chiaveVista = chiaveVista();
   if (!Z.length) { P.push(Fai(fine), Di('W', 'Qui il binario esce dal quaderno: la concavità è nella tabella', true)); return; }
   g.W.x = Z[0].xa;
@@ -908,7 +958,7 @@ COSTRUTTORI.concavita = function (g, F) {
       g.W.x = Math.max(z.xa, Math.min(z.xb, invX(z.punto(u)[0])));
     }));
     P.push(Fai(function (g) {
-      if (z.s > 0) g.lasciato = { z: z, t0: GT };
+      if (z.s > 0 && !z.B) g.lasciato = { z: z, t0: GT };
       g.att = { fase: 'fermo', z: z, lato: 'E' }; g.W.x = z.xb;
     }));
   });
@@ -1061,6 +1111,16 @@ function scenaConcavita(g) {
     var stl = z.stato(a.t);
     ramo(z.C);
     rampino(z.C[0], z.C[1] + 4, Math.PI / 2);
+    if (stl.dopo !== undefined) {                     // fune lasciata: torna a piombo dondolando
+      var ad = Math.PI / 2 + (z.a1 - Math.PI / 2) * Math.cos(stl.dopo * 6) * (1 - stl.dopo);
+      tratto([z.C, [z.C[0] + Math.cos(ad) * z.Rh, z.C[1] + Math.sin(ad) * z.Rh]], { col: VERDE_INK, lw: 1.8, passo: 10 });
+      if (stl.dopo < 0.85) {
+        var hp = 34 * OMINO;
+        ctx.save(); ctx.translate(stl.P[0], stl.P[1] - hp); ctx.rotate(stl.dopo * Math.PI * 2);
+        omino(0, hp, { posa: 'raccolto' }); ctx.restore();
+      } else omino(stl.P[0], stl.P[1], { posa: 'fermo' });
+      return;
+    }
     if (stl.an === null) {                            // salta verso la fune, che pende un po' molle
       var pv = stl.P, mano = [pv[0] + 8, pv[1] - 44 * OMINO], mz = [(z.C[0] + mano[0]) / 2 + 10, Math.max(z.C[1], mano[1]) + 30];
       tratto([z.C, mz, mano], { col: VERDE_INK, lw: 1.6, passo: 10 });
@@ -1482,6 +1542,12 @@ function protetti() {
     var an = ancoraConcavita(g);
     if (an) box(an[2][0], an[2][1], an[2][2], an[2][3]);
     (g.piano || []).forEach(function (z) { box(z.S[0] - 36, z.S[1] - 4, 72, 14, 4); box(z.E[0] - 36, z.E[1] - 4, 72, 14, 4); });
+    var at = g.att;
+    if (at && at.z && at.z.s > 0 && at.z.C && at.fase !== 'fermo') {   // il ramo e la fune del rampino
+      var Cr = at.z.C, an2 = an ? [an[2][0] + an[2][2] / 2, an[2][1] + an[2][3] / 2] : Cr;
+      box(Cr[0] - 34, Cr[1] - 14, 68, 26, 9);
+      for (var k = 1; k < 6; k++) { var px = lerp(Cr[0], an2[0], k / 6), py = lerp(Cr[1], an2[1], k / 6); box(px - 12, py - 12, 24, 24, 9); }
+    }
     return r;
   }
   var p = g.pos();
