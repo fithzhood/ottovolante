@@ -14,14 +14,14 @@ var S = {
   F: FUNZIONI[0], giro: null,
   prog: {}, fatto: {}, cartelli: [], limiti: [],
   play: false, ff: false, autoPausa: true, vel: 1,
-  zoom: { z: 1, x0: 0 }, fumetti: []
+  zoom: { z: 1, x0: 0, y0: 0 }, fumetti: []
 };
 var CLOCK = 0, GT = 0;     // orologio vero (per il tremolio) e tempo di gioco (si ferma in pausa)
 
 function paginaPulita() {
   IDGIRI.forEach(function (id) { S.prog[id] = -INF; S.fatto[id] = false; });
   S.cartelli = []; S.limiti = []; S.fumetti = []; S.orizz = [];
-  S.zoom = { z: 1, x0: 0 };
+  S.zoom = zoomBase();
 }
 
 // ── Impaginazione, in unità: lo schermo è alto almeno 720 unità ──
@@ -52,11 +52,14 @@ function calcolaVista() {
   oy = Math.round(((Gy0 + Gy1) / 2 + (w[2] + w[3]) / 2 * sy) / QUAD) * QUAD;
 }
 
-// mondo → schermo (X con lo zoom dei limiti, Xb senza)
+// mondo → schermo. Lo zoom dei limiti è uniforme attorno a (x0, y0): stesso fattore su x e su y,
+// quindi la funzione si ingrandisce (o si rimpicciolisce) senza deformarsi. Xb è la x senza zoom.
 function X(x) { var z = S.zoom; return ox + z.x0 * sx + (x - z.x0) * z.z * sx; }
 function Xb(x) { return ox + x * sx; }
-function Y(y) { return oy - y * sy; }
+function Y(y) { var z = S.zoom; return oy - z.y0 * sy - (y - z.y0) * z.z * sy; }
 function invX(px) { var z = S.zoom; return z.x0 + ((px - ox) / sx - z.x0) / z.z; }
+function invY(py) { var z = S.zoom; return z.y0 + ((oy - py) / sy - z.y0) / z.z; }
+function zoomBase(x0, y0) { return { z: 1, x0: x0 || 0, y0: y0 || 0 }; }
 function visA() { return (Gx0 - ox) / sx; }
 function visB() { return (Gx1 - ox) / sx; }
 function clampY(v) { return Math.max(-4000, Math.min(VH + 4000, v)); }
@@ -116,49 +119,36 @@ function disegnaAssi() {
     tratto([[x0 - 6, Gy0 + 11], [x0, Gy0], [x0 + 6, Gy0 + 11]], { lw: 1.5, amp: 0.3 });
     scrivi('y', x0 + 10, Gy0 + 16, 18, BLU);
   }
-  var lab = 15, k, t;
-  if (Math.abs(S.zoom.z - 1) < 0.02) {
-    var px = passoTacche(sx);
-    for (k = Math.ceil(visA() / px) * px; k <= visB(); k += px) {
-      if (k === 0 || X(k) > Gx1 - 24) continue;
-      t = X(k);
-      linea(t, y0 - 4, t, y0 + 4, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
-      scrivi(fmt(k), t, y0 + 19, lab, MATITA, 0, 'center');
-    }
-  } else if (S.zoom.z < 1) {                     // vista allontanata (limiti a ±∞): tacche a potenze di 10
-    var pz = Math.pow(10, Math.ceil(Math.log(70 / (S.zoom.z * sx)) / Math.LN10));
-    for (k = Math.ceil(invX(Gx0) / pz) * pz; k <= invX(Gx1); k += pz) {
-      if (Math.abs(k) < pz / 2 || X(k) > Gx1 - 30) continue;
-      t = X(k);
-      linea(t, y0 - 4, t, y0 + 4, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
-      scrivi(Math.abs(k) >= 1000 ? fmtQuota(k) : fmt(k), t, y0 + 19, lab, MATITA, 0, 'center');
-    }
-    var rz = Math.round(1 / S.zoom.z);
-    scrivi('vista allontanata ×' + (rz >= 1000 ? fmtQuota(rz) : fmt(rz)), Gx1 - 8, Gy1 - 8, 16, MATITA, 0, 'right');
-  } else {
-    t = X(S.zoom.x0);
-    linea(t, y0 - 5, t, y0 + 5, { lw: 1.2, passate: 1, amp: 0.3, col: MATITA });
-    scrivi(etichetta(S.F, S.zoom.x0), t, y0 + 19, lab, MATITA, 0, 'center');
-    scrivi('zoom ×' + fmt(S.zoom.z, 0), Gx1 - 8, Gy1 - 8, 16, MATITA, 0, 'right');
+  var lab = 15, k, t, i, zoomato = Math.abs(S.zoom.z - 1) >= 0.02;
+  var px = zoomato ? passoBello(70 / (S.zoom.z * sx)) : passoTacche(sx);
+  var py = zoomato ? passoBello(42 / (S.zoom.z * sy)) : passoTacche(sy);
+  for (i = Math.ceil(invX(Gx0) / px); i * px <= invX(Gx1); i++) {
+    k = i * px; t = X(k);
+    if (i === 0 || t > Gx1 - 30) continue;
+    linea(t, y0 - 4, t, y0 + 4, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
+    scrivi(etTacca(k, px), t, y0 + 19, lab, MATITA, 0, 'center');
   }
-  var py = passoTacche(sy);
-  for (k = Math.ceil((oy - Gy1) / sy / py) * py; k <= (oy - Gy0) / sy; k += py) {
-    if (k === 0 || Y(k) < Gy0 + 20) continue;
-    t = Y(k);
-    linea(x0 - 4, t, x0 + 4, t, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
-    scrivi(fmt(k), x0 - 8, t + 5, lab, MATITA, 0, 'right');
+  var xr = x0 > Gx0 + 60 && x0 < Gx1 ? x0 : Gx0 + 70;       // se l'asse y è fuori, un righello delle quote
+  if (xr !== x0) linea(xr, Gy1 - 6, xr, Gy0 + 6, { lw: 1.2, passate: 1, col: MATITA, amp: 0.3, passo: 40 });
+  for (i = Math.ceil(invY(Gy1) / py); i * py <= invY(Gy0); i++) {
+    k = i * py; t = Y(k);
+    if ((i === 0 && xr === x0) || t < Gy0 + 20 || t > Gy1 - 8) continue;
+    linea(xr - 4, t, xr + 4, t, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
+    scrivi(etTacca(k, py), xr - 8, t + 5, lab, MATITA, 0, 'right');
   }
-  if (x0 > Gx0 && x0 < Gx1 && y0 > Gy0 && y0 < Gy1 && S.zoom.z < 1.02) scrivi('0', x0 - 8, y0 + 19, lab, MATITA, 0, 'right');
-  if (x0 <= Gx0 || x0 >= Gx1) {                  // l'asse y è fuori (zoom dei limiti): un righello delle quote
-    var rx = Gx0 + 30;
-    linea(rx, Gy1 - 6, rx, Gy0 + 6, { lw: 1.2, passate: 1, col: MATITA, amp: 0.3, passo: 40 });
-    for (k = Math.ceil((oy - Gy1) / sy / py) * py; k <= (oy - Gy0) / sy; k += py) {
-      t = Y(k);
-      if (t < Gy0 + 10 || t > Gy1 - 10) continue;
-      linea(rx - 5, t, rx + 5, t, { lw: 1.1, passate: 1, amp: 0.3, col: MATITA });
-      scrivi(fmt(k), rx - 9, t + 5, lab, MATITA, 0, 'right');
-    }
+  if (x0 > Gx0 && x0 < Gx1 && y0 > Gy0 && y0 < Gy1) scrivi('0', x0 - 8, y0 + 19, lab, MATITA, 0, 'right');
+  if (zoomato) {
+    var rz = Math.round(S.zoom.z > 1 ? S.zoom.z : 1 / S.zoom.z);
+    scrivi((S.zoom.z > 1 ? 'ingrandimento ×' : 'vista allontanata ×') + (rz >= 1000 ? fmtQuota(rz) : fmt(rz)), Gx1 - 8, Gy1 - 8, 16, MATITA, 0, 'right');
   }
+}
+function passoBello(min) {
+  var p = Math.pow(10, Math.floor(Math.log(min) / Math.LN10)), r = min / p;
+  return (r <= 1 ? 1 : r <= 2 ? 2 : r <= 5 ? 5 : 10) * p;
+}
+function etTacca(k, passo) {
+  if (Math.abs(k) >= 1000) return fmtQuota(k);
+  return fmt(k, passo >= 1 ? 0 : Math.ceil(-Math.log(passo) / Math.LN10 - 1e-9));
 }
 
 // ── Il grafico ──
@@ -313,28 +303,65 @@ function fumetto(chi, testo, dur) {
   S.fumetti = S.fumetti.filter(function (b) { return b.chi !== chi; });
   S.fumetti.push({ chi: chi, testo: testo, t0: GT, dur: dur || 3.6 });
 }
+/** Il fumetto si mette dove non copre gli omini né le cose di cui si sta parlando: si provano
+ *  diverse posizioni attorno alla testa e si sceglie la prima che non tocca niente di protetto
+ *  (gli altri fumetti compresi). Una posizione già buona non si cambia, per non farlo saltellare. */
+function sovrapposto(r, q) {
+  var w = Math.min(r[0] + r[2], q[0] + q[2]) - Math.max(r[0], q[0]);
+  var h = Math.min(r[1] + r[3], q[1] + q[3]) - Math.max(r[1], q[1]);
+  return w > 0 && h > 0 ? w * h : 0;
+}
 function disegnaFumetti() {
   S.fumetti = S.fumetti.filter(function (b) { return GT - b.t0 < b.dur; });
+  var protetti = S.giro && S.giro.protetti ? S.giro.protetti() : [], posati = [];
   S.fumetti.forEach(function (b, n) {
     var an = S.giro && S.giro.ancora(b.chi);
     if (!an) return;
-    var ax = an[0], ay = an[1], testo = b.testo;
-    if (ay < Gy0 + 20) { ay = Gy0 + 20; testo = '↑ ' + testo; }
-    if (ay > Gy1 - 20) { ay = Gy1 - 20; testo = '↓ ' + testo; }
+    var ax = an[0], ay = an[1], testo = b.testo, corpo = an[2];
+    if (ay < Gy0 - 30) { testo = '↑ ' + testo; corpo = null; }          // la freccia solo se è davvero uscito
+    if (ay > Gy1 + 20) { testo = '↓ ' + testo; corpo = null; }
+    ay = Math.max(Gy0 + 20, Math.min(Gy1 - 20, ay));
     ax = Math.max(Gx0 + 10, Math.min(Gx1 - 10, ax));
     var size = 21, righe = aCapo(testo, size, 320);
     var w = 0; righe.forEach(function (r) { w = Math.max(w, larghezza(r, size)); });
     w += 30; var h = righe.length * 27 + 18;
-    var lato = b.chi === 'sx' ? -1 : 1;
-    var bx = lato > 0 ? ax + 16 : ax - 16 - w, by = ay - 34 - h, sotto = false;
-    bx = Math.max(Gx0 + 4, Math.min(Gx1 - 4 - w, bx));
-    if (by < Gy0 + 4) { by = ay + 34; sotto = true; }
-    by = Math.max(Gy0 + 4, Math.min(Gy1 - 4 - h, by));
-    var age = GT - b.t0, a = Math.min(1, age / 0.15, (b.dur - age) / 0.3);
-    ctx.save(); ctx.globalAlpha = Math.max(0, a);
-    var tx = Math.max(bx + 18, Math.min(bx + w - 18, ax)), ey = sotto ? by : by + h;
-    var coda = [[tx - 9, ey], [ax + (tx > ax ? 4 : -4), sotto ? ay + 12 : ay - 12], [tx + 9, ey]];
+    var lato = b.chi === 'sx' ? -1 : 1, cand = [];
+    [30, 80, 140, 210].forEach(function (d) {
+      [[lato, -1], [-lato, -1], [lato, 1], [-lato, 1], [lato, 0], [-lato, 0]].forEach(function (v) {
+        var bx = v[1] === 0 ? (v[0] > 0 ? ax + d : ax - d - w) : (v[0] > 0 ? ax + 10 : ax - 10 - w);
+        var by = v[1] < 0 ? ay - d - h : v[1] > 0 ? ay + d + 40 : ay - h / 2;
+        bx = Math.max(Gx0 + 4, Math.min(Gx1 - 4 - w, bx));
+        by = Math.max(Gy0 + 4, Math.min(Gy1 - 4 - h, by));
+        cand.push([bx, by, w, h]);
+      });
+    });
+    function costo(r, i) {
+      var c = i * 3;
+      protetti.forEach(function (p) { c += sovrapposto(r, [p[0] - 6, p[1] - 6, p[2] + 12, p[3] + 12]) * (p[4] || 10); });
+      posati.forEach(function (p) { c += sovrapposto(r, [p[0] - 8, p[1] - 8, p[2] + 16, p[3] + 16]) * 20; });
+      return c;
+    }
+    var scelto = 0, migliore = Infinity;
+    cand.forEach(function (r, i) { var c = costo(r, i); if (c < migliore) { migliore = c; scelto = i; } });
+    if (b.posto !== undefined && b.posto < cand.length && costo(cand[b.posto], 0) <= migliore + 40) scelto = b.posto;
+    b.posto = scelto;
+    var R = cand[scelto], bx = R[0], by = R[1];
+    posati.push(R);
+    // la coda punta alla testa se il fumetto sta sopra, altrimenti al punto più vicino dell'omino
+    if (corpo && by + h > corpo[1] - 4) {
+      ax = Math.max(corpo[0], Math.min(corpo[0] + corpo[2], bx + w / 2));
+      ay = Math.max(corpo[1], Math.min(corpo[1] + corpo[3], by + h / 2));
+    }
+    // la coda parte dal lato del fumetto rivolto verso la testa
+    var base, dir;
+    if (ay > by + h) { base = [Math.max(bx + 18, Math.min(bx + w - 18, ax)), by + h]; dir = [1, 0]; }
+    else if (ay < by) { base = [Math.max(bx + 18, Math.min(bx + w - 18, ax)), by]; dir = [1, 0]; }
+    else { base = [ax < bx ? bx : bx + w, Math.max(by + 14, Math.min(by + h - 14, ay))]; dir = [0, 1]; }
+    var dx = ax - base[0], dy = ay - base[1], L = Math.hypot(dx, dy) || 1, k = Math.max(0, L - 10) / L;
+    var punta = [base[0] + dx * k, base[1] + dy * k];
+    var coda = [[base[0] - dir[0] * 9, base[1] - dir[1] * 9], punta, [base[0] + dir[0] * 9, base[1] + dir[1] * 9]];
     var corpo = rettangolo(bx, by, w, h, 14);
+    ctx.save();
     riempi(corpo, '#fffdf6', 0.94); riempi(coda, '#fffdf6', 0.94);
     seme(1000 + n * 50 + (b.chi === 'dx' ? 7 : 0));
     var col = b.chi === 'dx' ? ROSSO : BLU;
@@ -381,7 +408,7 @@ function scegliFunzione(i) {
 }
 function scegliGiro(id) {
   if (!haGiro(S.F, id)) return;
-  S.zoom = { z: 1, x0: 0 }; S.fumetti = [];
+  S.zoom = zoomBase(); S.fumetti = [];
   S.giro = creaGiro(id);
   S.play = true; S.ff = false;
   aggiornaComandi();

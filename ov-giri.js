@@ -67,6 +67,7 @@ function creaGiro(id) {
   g.ancora = ancora;
   g.disegnaSfondo = disegnaSfondo;
   g.disegnaAttori = disegnaAttori;
+  g.protetti = protetti;
   if (g.modo !== 'limiti') S.prog[id] = g.W.x;
   return g;
 }
@@ -83,7 +84,7 @@ function aggiornaGiro(dt) {
   if (this.modo !== 'limiti') S.prog[this.id] = Math.max(S.prog[this.id], this.W.x);
   if (this.i >= this.passi.length) {
     this.finito = true; S.play = false; S.ff = false;
-    if (this.modo === 'limiti') S.zoom = { z: 1, x0: 0 };
+    if (this.modo === 'limiti') S.zoom = zoomBase();
   }
 }
 function cammina(xTo, k) {
@@ -131,13 +132,25 @@ function ancora(chi) {
     var a = this.amici && this.amici[chi];
     if (!a) return null;
     var y = this.F.f(a.x);
-    return [X(a.x) + (chi === 'sx' ? -10 : 10), clampY(Y(isFinite(y) ? y : 0)) - 56 * OMINO];
+    var k = scalaAmici(), hx = X(a.x) + (chi === 'sx' ? -10 : 10) * k, hy = clampY(Y(isFinite(y) ? y : 0)) - 56 * OMINO * k;
+    return [hx, hy, [hx - 20 * OMINO * k, hy, 40 * OMINO * k, 58 * OMINO * k]];
   }
   var p = this.pos();
-  if (!p) return null;
-  if (this.id === 'concavita') { var a2 = attrezzo(this); if (a2) return [a2.testa[0], a2.testa[1] - 10]; }
-  return [p[0], p[1] - 58 * OMINO];
+  if (!p) {                                          // fuori dallo schermo (asintoto): il fumetto resta, con la freccia
+    var yy = this.modo === 'asse' ? 0 : this.F.f(this.W.x);
+    return [X(this.W.x), isFinite(yy) ? clampY(Y(yy)) : Gy0 - 100, null];
+  }
+  if (this.id === 'concavita') {
+    var a2 = attrezzo(this);
+    if (a2) return [a2.testa[0], a2.testa[1] - 10, [p[0] - 45, p[1] - 105, 90, 115]];
+  }
+  if (this.modo === 'asse') return [p[0], p[1] - 58 * OMINO, [p[0] - 24, p[1] - 58 * OMINO, 48, 58 * OMINO]];
+  return [p[0], p[1] - 58 * OMINO, [p[0] - 40, p[1] - 58 * OMINO, 80, 58 * OMINO + 4]];
 }
+
+/** Gli amici dei limiti stanno nel disegno: con lo zoom si ingrandiscono, con la vista allontanata
+ *  si rimpiccioliscono (entro limiti che li tengano leggibili). */
+function scalaAmici() { return Math.max(0.45, Math.min(2, Math.pow(S.zoom.z, 0.3))); }
 
 // ── Il dominio: un omino a piedi sull'asse x, che pianta cartelli ──
 var COSTRUTTORI = {};
@@ -284,7 +297,6 @@ COSTRUTTORI.concavita = function (g, F) {
 COSTRUTTORI.limiti = function (g, F) {
   g.modo = 'limiti';
   var P = g.passi, H = [1, 0.5, 0.1, 0.01, 0.001], larg = Gx1 - Gx0;
-  function zoomPer(h) { return Math.max(1, 0.2 * larg / (h * sx)); }
   function vai(xs, xd, z, soloDx) {
     return Tween(1.3, function (g, p) { p.s = g.amici.sx.x; p.d = g.amici.dx.x; p.z = S.zoom.z; },
       function (g, u, p) {
@@ -304,7 +316,7 @@ COSTRUTTORI.limiti = function (g, F) {
     var spazio = s > 0 ? Gx1 - ox : ox - Gx0;
     var x0 = s * Math.max(1, Math.min(2, Math.floor(0.6 * spazio / sx)));
     function zoomInf(x) { return Math.min(1, 0.78 * spazio / (Math.abs(x) * sx)); }
-    P.push(Fai(function (g) { S.zoom = { z: 1, x0: 0 }; g.amici = {}; g.amici[chi] = { x: x0 }; g.lineaX0 = false; }));
+    P.push(Fai(function (g) { S.zoom = zoomBase(); g.amici = {}; g.amici[chi] = { x: x0 }; g.lineaX0 = false; }));
     P.push(Di(chi, 'Vado verso ' + (s > 0 ? 'più' : 'meno') + ' infinito, sempre più lontano, e grido la mia quota', false, 4));
     P.push(Attendi(2.4));
     [x0, s * 10, s * 100, s * 1000].forEach(function (xv, n) {
@@ -326,7 +338,18 @@ COSTRUTTORI.limiti = function (g, F) {
   F.limiti.forEach(function (L) {
     if (L.caso === 'piuinf' || L.caso === 'menoinf') { infinito(L); return; }
     var x0 = L.x0, t = L.t, soloDx = L.caso === 'destra';
-    P.push(Fai(function (g) { S.zoom = { z: 1, x0: x0 }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; g.lineaX0 = true; }));
+    // lo zoom si centra sul punto a cui si tende, e non ingrandisce più di quanto serve
+    // a tenere gli omini nel quaderno (tranne all'asintoto, dove devono proprio sparire)
+    var yc = L.caso === 'salto' ? (L.ysx + L.ydx) / 2 : L.caso === 'infinito' ? 0 : L.yv;
+    function zoomPer(h) {
+      var z = 0.2 * larg / (h * sx), d = 0;
+      if (L.caso !== 'infinito') {
+        [x0 - h, x0 + h].forEach(function (x) { var v = F.f(x); if (isFinite(v)) d = Math.max(d, Math.abs(v - yc)); });
+        if (d > 0) z = Math.min(z, 0.33 * (Gy1 - Gy0) / (d * sy));
+      }
+      return Math.max(1, z);
+    }
+    P.push(Fai(function (g) { S.zoom = { z: 1, x0: x0, y0: yc }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; g.lineaX0 = true; }));
     P.push(Di('sx', soloDx ? 'Io da sinistra non posso arrivare: qui la funzione non esiste!' : 'Io arrivo da sinistra!', false, 4));
     P.push(Di('dx', 'E io da destra! Ci avviciniamo a x = ' + t + ' e gridiamo la nostra quota', false, 4));
     P.push(Attendi(2.4));
@@ -376,7 +399,8 @@ function omino(x, y, o) {
   ctx.save();
   ctx.translate(x, y);
   if (o.rot) ctx.rotate(o.rot);
-  ctx.scale((o.dir < 0 ? -1 : 1) * OMINO, OMINO);
+  var sc = OMINO * (o.scala || 1);
+  ctx.scale((o.dir < 0 ? -1 : 1) * sc, sc);
   seme(o.seme || 40);
   if (o.posa === 'raccolto') {                       // gambe piegate per la capriola
     tratto([[0, -17], [8, -21], [4, -9]], { col: c, lw: 1.7, passo: 5 });
@@ -611,7 +635,8 @@ function disegnaAttori() {
       var y = F.f(a.x), fuori = !isFinite(y);
       var ys = Y(fuori ? 0 : y);
       if (fuoriY(ys)) return;
-      omino(X(a.x) + (chi === 'sx' ? -10 : 10), ys, {
+      var k = scalaAmici();
+      omino(X(a.x) + (chi === 'sx' ? -10 : 10) * k, ys, { scala: k,
         col: chi === 'sx' ? BLU : ROSSO, maglia: chi === 'sx' ? GIALLO : ROSA, amico: chi === 'dx',
         posa: fuori ? 'perplesso' : g.amici.muove ? 'cammina' : 'fermo', fase: GT * 9, dir: chi === 'sx' ? 1 : -1,
         seme: chi === 'sx' ? 41 : 43 });
@@ -630,7 +655,7 @@ function disegnaAttori() {
   if (g.id === 'derivata' && !g.W.hop) {
     var m = pendenza(F, g.W.x);
     seme(80);
-    scrivi('f′ = ' + (Math.abs(m) >= 100 ? fmtSegnato(m, 0) : fmtSegnato(m, 1)), p[0], Math.min(Gy1 - 8, p[1] + 34), 19, ROSSO, 0, 'center');
+    scrivi('f′ = ' + (Math.abs(m) >= 100 ? fmtSegnato(m, 0) : fmtSegnato(m, 1)), p[0], Math.min(Gy1 - 8, p[1] + 54), 19, ROSSO, 0, 'center');
   }
 }
 
@@ -724,7 +749,7 @@ function segniSopra() {
     var x = X(p.x), y = Y(F.f(p.x));
     linea(x, y, x, Y(0), { col: MATITA, lw: 1, passate: 1, dash: [4, 5], amp: 0.3 });
     ellisse(x, y, 12, 12, { col: ROSSO, lw: 1.7 });
-    scrivi(p.tipo, x, p.tipo === 'max' ? y - 20 : y + 32, 17, ROSSO, 0, 'center');
+    scrivi(p.tipo, x, y + 32, 17, ROSSO, 0, 'center');
   });
   F.flessi.forEach(function (p) {
     if (S.prog.concavita < p.x) return;
@@ -767,7 +792,11 @@ function tratteTunnel(F, A, B) {
     var dentro = isFinite(ys) && ys > y0 - 30 && ys < Gy1 + 200 && ramoDi(F, x) >= 0;
     if (dentro && cur && ramoDi(F, x) !== cur.ramo) dentro = false;
     if (dentro) {
-      if (!cur) { cur = { ramo: ramoDi(F, x), pts: [] }; tratte.push(cur); }
+      if (!cur) {
+        var rr = F.rami[ramoDi(F, x)];
+        cur = { ramo: ramoDi(F, x), pts: [], xa: isFinite(rr[0]) ? X(rr[0]) + 3 : -1e5, xb: isFinite(rr[1]) ? X(rr[1]) - 3 : 1e5 };
+        tratte.push(cur);
+      }
       cur.pts.push([X(x), ys]);
     } else cur = null;
   }
@@ -783,7 +812,9 @@ function tratteTunnel(F, A, B) {
   });
   return tratte;
 }
-function soffitto(t, i, d) { return [t.pts[i][0] + t.su[i][0] * d, t.pts[i][1] + t.su[i][1] * d]; }
+function soffitto(t, i, d) {                     // il tunnel non scavalca l'asintoto: resta nel suo ramo
+  return [Math.max(t.xa, Math.min(t.xb, t.pts[i][0] + t.su[i][0] * d)), t.pts[i][1] + t.su[i][1] * d];
+}
 function terraETunnel(F, A, B) {
   var y0 = Y(0);
   if (y0 >= Gy1) return;
@@ -841,4 +872,47 @@ function trivella() {
     var u = (CLOCK * 1.7 + j * 0.21) % 1;
     puntino(48 - u * 30 + Math.sin(j * 7) * 4, -18 - u * 22 * (j % 2 ? 1 : -0.6), 1.3 + (j % 3) * 0.5, TERRA);
   }
+}
+
+// ── Che cosa i fumetti non devono coprire: gli omini e quello di cui si parla ──
+function protetti() {
+  var g = this, F = g.F, r = [];
+  function box(x, y, w, h, peso) { r.push([x, y, w, h, peso || 10]); }
+  function omone(p, k) { k = OMINO * (k || 1); box(p[0] - 30 * k, p[1] - 64 * k, 60 * k, 68 * k); }
+  function punto(x, y, raggio, peso) { if (isFinite(y)) box(X(x) - raggio, Y(y) - raggio, 2 * raggio, 2 * raggio, peso); }
+  // i segni notevoli già sul quaderno pesano meno; quello sotto l'omino pesa come lui
+  F.zeri.forEach(function (z) { punto(z.x, 0, 14, 2); });
+  F.staz.forEach(function (z) { punto(z.x, F.f(z.x), 20, 2); });
+  F.flessi.forEach(function (z) { punto(z.x, F.f(z.x), 20, 2); });
+  S.cartelli.forEach(function (c) {
+    var w = larghezzaTavola(c.testo), x = X(c.x) + c.lato * 3, bx = c.lato > 0 ? x - 4 : x - w + 4;
+    box(bx, Y(0) - 80, w, 34, 6);
+  });
+  if (g.modo === 'limiti') {
+    if (!g.amici) return r;
+    var k = scalaAmici();
+    ['sx', 'dx'].forEach(function (chi) {
+      var a = g.amici[chi];
+      if (!a) return;
+      var y = F.f(a.x), ys = Y(isFinite(y) ? y : 0);
+      if (!fuoriY(ys)) omone([X(a.x) + (chi === 'sx' ? -10 : 10) * k, ys], k);
+    });
+    if (g.lineaX0) {                                  // il punto a cui si tende (il buco, il salto)
+      F.vuoti.concat(F.pieni).forEach(function (q) { if (Math.abs(q[0] - S.zoom.x0) < 1e-9) punto(q[0], q[1], 22, 10); });
+    }
+    return r;
+  }
+  var p = g.pos();
+  if (!p) return r;
+  box(p[0] - 24, p[1] - 24, 48, 48);                  // il punto del binario di cui si sta parlando
+  if (g.modo === 'asse') { omone(p); return r; }
+  if (g.id === 'concavita') {
+    box(p[0] - 50, p[1] - 112, 100, 124);
+    var a = attrezzo(g);
+    if (a) box(a.z.perno[0] - 42, a.z.perno[1] - 22, 84, 40, 6);
+    return r;
+  }
+  box(p[0] - 42, p[1] - 86, 84, 94);                  // carrello con l'omino
+  if (g.id === 'derivata') box(p[0] - 52, p[1] + 34, 104, 30, 6);
+  return r;
 }
