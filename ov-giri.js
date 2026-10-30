@@ -34,6 +34,50 @@ function Aggira(xTo) {
     if (u >= 1) g.W.dietro = 0;
   });
 }
+/** Gli ultimi punti del binario che si vedono prima e dopo l'asintoto in x0: lì si aprono i portali. */
+function bordiPortale(F, x0) {
+  function vede(x) { var y = Y(F.f(x)); return isFinite(y) && y > Gy0 + 75 && y < Gy1 - 20; }
+  var a = x0, b = x0, k;
+  for (k = 14; k < 3000; k++) { a = x0 - k / sx; if (vede(a)) break; }
+  for (k = 14; k < 3000; k++) { b = x0 + k / sx; if (vede(b)) break; }
+  return [a, b];
+}
+/** Il carrello entra nel portale arancione davanti al muro ed esce da quello azzurro dall'altra parte. */
+function Portale(x0) {
+  return Tween(2.2, function (g, p) {
+    p.ab = bordiPortale(g.F, x0);
+    g.portali = (g.portali || []).concat([{ a: p.ab[0], b: p.ab[1], t0: CLOCK }]);
+  }, function (g, u, p) {
+    var W = g.W;
+    if (u < 0.42) { W.x = p.ab[0]; W.portale = 1 - u / 0.42; }
+    else if (u < 0.58) { W.x = p.ab[1]; W.portale = 0; }
+    else { W.x = p.ab[1]; W.portale = (u - 0.58) / 0.42; }
+    W.y = g.F.f(W.x);
+    if (u >= 1) W.portale = undefined;
+  });
+}
+function angoloBinario(F, x) { return Math.atan2(-pendenza(F, x) * sy, sx); }
+/** Un portale: un anello luminoso perpendicolare al binario, appena sopra il punto p. */
+function portale(p, an, col, aperto) {
+  var up = [Math.sin(an), -Math.cos(an)], h = 34 * OMINO, c = [p[0] + up[0] * h, p[1] + up[1] * h];
+  var k = Math.min(1, aperto);
+  if (k <= 0) return;
+  ctx.save();
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.translate(c[0], c[1]); ctx.rotate(an); ctx.scale(k, k);
+  ctx.shadowColor = col; ctx.shadowBlur = 16;
+  ctx.fillStyle = col; ctx.globalAlpha = 0.28;
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 46, 0, 0, 7); ctx.fill();
+  ctx.globalAlpha = 1; ctx.lineWidth = 5; ctx.strokeStyle = col;
+  ctx.beginPath(); ctx.ellipse(0, 0, 13, 46, 0, 0, 7); ctx.stroke();
+  ctx.shadowBlur = 0; ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  for (var i = 0; i < 3; i++) {                        // il vortice che gira
+    var a0 = CLOCK * 4 + i * 2.1;
+    ctx.beginPath(); ctx.ellipse(0, 0, 8 - i * 2, 34 - i * 9, 0, a0, a0 + 2.2); ctx.stroke();
+  }
+  ctx.restore();
+}
+var ARANCIO = '#ff8a1e', CIANO = '#22a8ff';
 function Attendi(s) { var p = { t: 0 }; p.esegui = function (g, k) { p.t += k; return p.t >= s; }; return p; }
 function Tween(dur, inizio, fn) {
   var p = { t: -1 };
@@ -303,12 +347,15 @@ COSTRUTTORI.segno = function (g, F) {
       P.push(Cammina(e.x));
       P.push(Di('W', a === b ? 'Sfioro il suolo e ' + (b > 0 ? 'risalgo' : 'riscendo') + ': zero doppio, il segno non cambia!'
                              : b > 0 ? 'Zero! Riemergo: ora f(x) > 0' : 'Zero! Vado sotto il suolo: ora f(x) < 0', true));
+    } else if (e.tipo === 'esclusi' && e.dati.tipo === 'asintoto') {
+      P.push(Cammina(bordiPortale(F, e.x)[0]));
+      P.push(Di('W', 'Asintoto in x = ' + t + ': il muro non si attraversa, prendo il portale! ' +
+        (a === b ? 'Di là sono ancora ' + (b > 0 ? 'sopra' : 'sotto') + ': il segno non cambia'
+                 : 'Di là sono ' + (b > 0 ? 'sopra' : 'sotto') + ': cambio segno senza passare da zero!'), true));
+      P.push(Portale(e.x));
     } else if (e.tipo === 'esclusi') {
       P.push(Cammina(e.x - d));
-      P.push(Di('W', e.dati.tipo === 'asintoto'
-        ? 'Asintoto in x = ' + t + '! ' + (a === b ? 'Di là sono ancora ' + (b > 0 ? 'sopra' : 'sotto') + ': il segno non cambia'
-                                                  : 'Di là sono ' + (b > 0 ? 'sopra' : 'sotto') + ': cambio segno senza passare da zero!')
-        : 'Un buco nel binario in x = ' + t + ': lo salto!', true));
+      P.push(Di('W', 'Un buco nel binario in x = ' + t + ': lo salto!', true));
       P.push(Salta(e.x + d));
     } else {
       var b2 = segnoDi(F.f(e.x));
@@ -334,9 +381,13 @@ COSTRUTTORI.derivata = function (g, F) {
     if (e.tipo === 'staz') {
       P.push(Cammina(e.x));
       P.push(Di('W', 'In piano! f′(x) = 0: ' + (e.dati.tipo === 'max' ? 'un massimo. Ora scendo' : 'un minimo. Ora salgo'), true));
+    } else if (e.tipo === 'esclusi' && e.dati.tipo === 'asintoto') {
+      P.push(Cammina(bordiPortale(F, e.x)[0]));
+      P.push(Di('W', 'Asintoto: in x = ' + t + ' la derivata non esiste. Prendo il portale, e di là ' + moto(dopo(e.x)), true));
+      P.push(Portale(e.x));
     } else if (e.tipo === 'esclusi') {
       P.push(Cammina(e.x - d));
-      P.push(Di('W', (e.dati.tipo === 'asintoto' ? 'Asintoto' : 'Un buco') + ': in x = ' + t + ' la derivata non esiste. Di là ' + moto(dopo(e.x)), true));
+      P.push(Di('W', 'Un buco: in x = ' + t + ' la derivata non esiste. Di là ' + moto(dopo(e.x)), true));
       P.push(Salta(e.x + d));
     } else if (e.tipo === 'salti') {
       P.push(Cammina(e.x - 1e-7), Salta(e.x, F.f(e.x)));
@@ -489,7 +540,7 @@ function omino(x, y, o) {
     tratto([[0, -17], [sw, 0], [sw + 4, 0]], { col: c, lw: 1.7, passo: 5 });
     tratto([[0, -17], [-sw, 0], [-sw + 4, 0]], { col: c, lw: 1.7, passo: 5 });
   }
-  evidenzia([[-1, -32], [1, -19]], 11, o.maglia || GIALLO);
+  evidenzia([[-1, -32], [1, -19]], 11, opaco(o.maglia || GIALLO));
   tratto([[0, -33], [0, -16]], { col: c, lw: 1.8 });
   if (o.posa === 'perplesso') {
     tratto([[0, -29], [8, -37], [4, -47]], { col: c, lw: 1.6, passo: 5 });
@@ -508,7 +559,9 @@ function omino(x, y, o) {
   testa(0, -42, c, o.amico);
   ctx.restore();
 }
+function opaco(col) { return col === ROSA ? '#f6b3d2' : col === VERDE ? '#c4ee96' : '#fbe680'; }
 function testa(x, y, c, amico) {
+  ctx.fillStyle = CARTA; ctx.beginPath(); ctx.ellipse(x, y, 8.5, 9, 0, 0, 7); ctx.fill();
   ellisse(x, y, 8.5, 9, { col: c, lw: 1.7 });
   puntino(x + 3, y - 1, 1.5, c); puntino(x + 6.5, y - 1.5, 1.5, c);
   if (amico) tratto([[x - 6, y - 7], [x - 3, y - 13], [x, y - 8], [x + 3, y - 14], [x + 6, y - 8]], { col: c, lw: 1.4, passo: 4 });
@@ -523,7 +576,7 @@ function carrello(xs, ys, ang, conAsta, conTrivella) {
   if (conAsta) linea(-150, 0, 150, 0, { col: MATITA, lw: 1, passate: 1, amp: 0.3, dash: [6, 6], passo: 40, alpha: 0.6 });
   ctx.scale(OMINO, OMINO);
   if (conTrivella) trivella();
-  evidenzia([[2, -36], [2, -24]], 10, GIALLO);
+  evidenzia([[2, -36], [2, -24]], 10, opaco(GIALLO));
   tratto([[2, -37], [2, -22]], { lw: 1.8 });
   if (conAsta) {                                      // in sella con la lancia in resta, parallela alla tangente
     tratto([[2, -32], [-6, -30], [-4, -27]], { lw: 1.6, passo: 5 });
@@ -535,7 +588,7 @@ function carrello(xs, ys, ang, conAsta, conTrivella) {
   }
   testa(3, -46, BLU, false);
   var corpo = [[-19, -9], [19, -9], [23, -28], [-23, -28]];
-  riempi(corpo, 'rgba(255, 210, 60, 0.55)');
+  riempi(corpo, '#ffd64f');
   tratto(corpo, { chiuso: true, lw: 1.8, passo: 8 });
   linea(-21, -19, 21, -19, { lw: 1, passate: 1 });
   ellisse(-11, -5, 5, 5, { lw: 1.6 }); ellisse(11, -5, 5, 5, { lw: 1.6 });
@@ -597,7 +650,7 @@ function lancia() {
   var y = -27, coda = -34, mano = 12, cono = 30, punta = 112;
   seme(33);
   var asta = [[cono, y - 4.2], [punta, y - 0.6], [punta + 6, y], [punta, y + 0.6], [cono, y + 4.2]];
-  riempi(asta, 'rgba(250, 244, 230, 0.95)');
+  riempi(asta, '#faf4e6');
   for (var x = cono + 4; x < punta - 6; x += 12) {     // le strisce rosse a spirale
     var t0 = (x - cono) / (punta - cono), t1 = (x + 6 - cono) / (punta - cono);
     riempi([[x, y - 4.2 * (1 - t0) - 0.6 * t0], [x + 6, y - 4.2 * (1 - t1) - 0.6 * t1], [x + 2, y + 4.2 * (1 - t1) + 0.6 * t1], [x - 4, y + 4.2 * (1 - t0) + 0.6 * t0]], 'rgba(196, 33, 43, 0.75)');
@@ -750,9 +803,9 @@ COSTRUTTORI.concavita = function (g, F) {
     if (i) {
       var pr = Z[i - 1], stessa = Math.hypot(pr.E[0] - z.S[0], pr.E[1] - z.S[1]) < 12, cambia = pr.s !== z.s;
       var asintoto = F.esclusi.some(function (e) { return e.x > pr.xb && e.x < z.xa; });
-      if (asintoto) P.push(Di('W', 'Asintoto! Di là ' + (cambia ? 'cambio attrezzo e prendo ' : 'tengo ') + attrezzoDi(z.s), true));
+      if (asintoto) P.push(Di('W', 'Asintoto! Il muro non si attraversa: prendo il portale. Di là ' + (cambia ? 'cambio attrezzo e prendo ' : 'tengo ') + attrezzoDi(z.s), true));
       else if (cerca(F.flessi, pr.b)) P.push(Di('W', 'Flesso! La concavità cambia: lascio ' + (pr.s > 0 ? 'il rampino' : 'l’asta') + ' e prendo ' + attrezzoDi(z.s), true));
-      if (!stessa) P.push(Traversata(pr, z));
+      if (!stessa) P.push(Traversata(pr, z, asintoto));
     }
     if (z.s > 0) P.push(Tween(0.9, function (g) { g.att = { fase: 'lancio', z: z, k: 0 }; }, function (g, u) { g.att.k = u; }));
     else P.push(Tween(0.9, function (g) { g.att = { fase: 'rincorsa', z: z, k: 0 }; }, function (g, u) { g.att.k = u; }));
@@ -768,8 +821,8 @@ COSTRUTTORI.concavita = function (g, F) {
   P.push(Fai(fine), Di('W', 'Fine corsa! La concavità è nella tabella', true));
 };
 /** Da una piattaforma alla successiva quando non coincidono (un asintoto, un tratto fuori dal quaderno). */
-function Traversata(da, a) {
-  return Tween(1.1, function (g) { g.att = { fase: 'salto', da: da, a: a, u: 0 }; }, function (g, u) {
+function Traversata(da, a, conPortale) {
+  return Tween(conPortale ? 2.2 : 1.1, function (g) { g.att = { fase: conPortale ? 'portale' : 'salto', da: da, a: a, u: 0, t0: CLOCK }; }, function (g, u) {
     g.att.u = u;
     if (u >= 1) { g.att = { fase: 'fermo', z: a, lato: 'S' }; g.W.x = a.xa; }
   });
@@ -807,7 +860,7 @@ function appeso(p, rot) {
   ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(rot - Math.PI / 2); ctx.scale(OMINO, OMINO);
   seme(71);
   tratto([[-3, 0], [0, 20]], { lw: 1.6 }); tratto([[3, 0], [0, 20]], { lw: 1.6 });
-  evidenzia([[0, 20], [0, 34]], 11, GIALLO);
+  evidenzia([[0, 20], [0, 34]], 11, opaco(GIALLO));
   tratto([[0, 18], [0, 36]], { lw: 1.8 });
   var sw = Math.sin(GT * 3) * 4;
   tratto([[0, 35], [-5 + sw, 52]], { lw: 1.7 }); tratto([[0, 35], [5 + sw, 52]], { lw: 1.7 });
@@ -874,6 +927,13 @@ function scenaConcavita(g) {
   var z = a.z;
   if (a.fase === 'fermo') { var pf = a.z[a.lato]; omino(pf[0], pf[1], { posa: 'fermo' }); return; }
   if (a.fase === 'salto') { var ps = puntoSalto(a); omino(ps[0], ps[1], { posa: 'raccolto' }); return; }
+  if (a.fase === 'portale') {
+    var ap = Math.min(1, (CLOCK - a.t0) / 0.35), pin = a.da.E, pout = a.a.S;
+    portale(pin, 0, ARANCIO, ap); portale(pout, 0, CIANO, ap);
+    var kk = a.u < 0.42 ? 1 - a.u / 0.42 : a.u < 0.58 ? 0 : (a.u - 0.58) / 0.42, pp = a.u < 0.5 ? pin : pout;
+    if (kk > 0.03) { ctx.save(); ctx.translate(pp[0], pp[1]); ctx.scale(kk, kk); omino(0, 0, { posa: 'fermo' }); ctx.restore(); }
+    return;
+  }
   if (a.fase === 'lancio') {                          // lancia il rampino verso il ramo
     ramo(z.C);
     omino(z.S[0], z.S[1], { posa: 'lancia' });
@@ -922,6 +982,7 @@ function ancoraConcavita(g) {
   var pts;
   if (a.fase === 'fermo') { var pf = a.z[a.lato]; pts = [pf, [pf[0], pf[1] - 2 * h0 - 8]]; }
   else if (a.fase === 'salto') { var p = puntoSalto(a); pts = [p, [p[0], p[1] - 2 * h0]]; }
+  else if (a.fase === 'portale') { var pq = a.u < 0.5 ? a.da.E : a.a.S; pts = [pq, [pq[0], pq[1] - 2 * h0 - 8]]; }
   else if (a.fase === 'lancio' || a.fase === 'rincorsa') pts = [a.z.S, [a.z.S[0], a.z.S[1] - 2 * h0 - 8]];
   else if (a.fase === 'liana') {
     var z = a.z, an = lerp(z.a0, z.a1, a.t);
@@ -963,13 +1024,23 @@ function disegnaAttori() {
       ctx.beginPath(); ctx.ellipse(p[0], p[1] + 1, 14 * (1 - 0.3 * d), 3, 0, 0, 7); ctx.fill(); ctx.restore();
     }
     omino(p[0], p[1] - 1, { posa: g.W.hop ? 'fermo' : d > 0 ? 'cammina' : g.W.posa, fase: g.W.passi / 9, scala: 1 - 0.38 * d });
-    if (d > 0) F.esclusi.forEach(function (e, i) { if (e.tipo === 'asintoto') muro(X(e.x), 2200 + i); });   // il muro gli passa davanti
+    if (d > 0 && muroVisibile()) F.esclusi.forEach(function (e, i) { if (e.tipo === 'asintoto') muro(X(e.x), 2200 + i); });   // il muro gli passa davanti
     return;
   }
 
   var ang = g.W.hop ? 0 : Math.atan2(-pendenza(F, g.W.x) * sy, sx);
   if (g.id === 'derivata' && g.bers) bersaglio(g.bers, F);
+  (g.portali || []).forEach(function (q) {
+    var ap = Math.min(1, (CLOCK - q.t0) / 0.35);
+    portale([X(q.a), Y(F.f(q.a))], angoloBinario(F, q.a), ARANCIO, ap);
+    portale([X(q.b), Y(F.f(q.b))], angoloBinario(F, q.b), CIANO, ap);
+  });
+  var kp = g.W.portale === undefined ? 1 : g.W.portale;
+  if (kp < 0.03) return;
+  ctx.save();
+  ctx.translate(p[0], p[1]); ctx.scale(kp, kp); ctx.translate(-p[0], -p[1]);
   carrello(p[0], p[1], ang, g.id === 'derivata' && !g.W.hop, g.id === 'segno' && !g.W.hop && g.W.y < 0);
+  ctx.restore();
   if (g.id === 'derivata' && !g.W.hop) {
     var m = pendenza(F, g.W.x);
     seme(80);
@@ -1015,11 +1086,7 @@ function disegnaSfondo() {
 
 // ── Gli asintoti verticali sono muri: mattoni dal fondo alla cima del quaderno, e oltre ──
 var MURO_L = 9;                                       // mezza larghezza, in unità
-function muroVisibile(F, e) {
-  var id = S.giro && S.giro.id;
-  if (id === 'limiti' || id === 'derivata' || id === 'concavita') return true;
-  return e.x <= Math.max(S.prog.dominio, S.prog.segno) || S.fatto.dominio || S.fatto.segno;
-}
+function muroVisibile() { var id = S.giro && S.giro.id; return id === 'dominio' || id === 'segno' || id === 'limiti'; }
 function eMuro(F, x) { return F.esclusi.some(function (e) { return e.tipo === 'asintoto' && Math.abs(e.x - x) < 1e-9; }); }
 function muro(cx, sm) {
   var y0 = Gy0 - 4, y1 = Gy1 + 4, L = MURO_L, h = 11, r, x;
@@ -1072,10 +1139,10 @@ function segniSotto() {
     if (q) tratteggio(q, { col: VIOLA, sp: 9, alpha: 0.6, lw: 1.4, ang: 0.85 });
   });
   F.esclusi.forEach(function (e, i) {
-    if (!muroVisibile(F, e)) return;
     seme(2200 + i);
-    if (e.tipo === 'asintoto') muro(X(e.x), 2200 + i);
-    else linea(X(e.x), Gy0, X(e.x), Gy1, { col: ROSSO, lw: 1.3, passate: 1, dash: [9, 7], amp: 0.4, passo: 40 });
+    if (e.tipo === 'asintoto' && muroVisibile()) muro(X(e.x), 2200 + i);
+    else if (e.tipo === 'asintoto' ? !!S.giro : e.x <= pD)
+      linea(X(e.x), Gy0, X(e.x), Gy1, { col: ROSSO, lw: 1.3, passate: 1, dash: [9, 7], amp: 0.4, passo: 40 });
   });
   S.orizz.forEach(function (y, i) {
     var yy = Y(y);
@@ -1116,7 +1183,7 @@ function segniSopra() {
 function larghezzaTavola(testo) { return larghezza(testo, 20) + 18; }
 function disegnaCartelli() {
   S.cartelli.forEach(function (c, i) {
-    var k = Math.min(1, (CLOCK - c.t0) / 0.25), x = X(c.x) + c.lato * (eMuro(S.F, c.x) ? MURO_L + 6 : 3), y = Y(0);
+    var k = Math.min(1, (CLOCK - c.t0) / 0.25), x = X(c.x) + c.lato * (eMuro(S.F, c.x) && muroVisibile() ? MURO_L + 6 : 3), y = Y(0);
     if (k <= 0) return;
     seme(3000 + i);
     ctx.save();

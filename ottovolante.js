@@ -432,6 +432,7 @@ function disegna() {
   disegnaVuoti();
   ctx.globalCompositeOperation = 'multiply';
   disegnaCartelli();
+  ctx.globalCompositeOperation = 'source-over';      // omini e carrello sono pieni: non si vede attraverso
   if (S.giro) S.giro.disegnaAttori();
   ctx.restore();
   disegnaFumetti();
