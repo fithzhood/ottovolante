@@ -155,16 +155,34 @@ function scalaAmici() { var z = S.zoom.z; return z < 1 ? Math.max(0.45, Math.pow
 
 /** La vista più vicina che contiene sia il quaderno di partenza sia i punti dati: quando un limite va
  *  all'infinito il disegno si allontana quanto basta perché gli omini (e la funzione) restino in vista. */
-function vistaCheContiene(pts) {
-  var xa = visA(), xb = visB(), ya = (oy - Gy1) / sy, yb = (oy - Gy0) / sy;
+// Oltre ×2 la funzione non si riconosce più (un'iperbole diventa due rette sugli assi): la vista non si
+// allontana di più, e da lì in poi gli omini escono dal quaderno con il fumetto e la freccia.
+var ZMIN = 1 / 2;
+function scatola(pts) {
+  var b = [visA(), visB(), (oy - Gy1) / sy, (oy - Gy0) / sy];
   pts.forEach(function (p) {
     if (!isFinite(p[0]) || !isFinite(p[1])) return;
-    xa = Math.min(xa, p[0]); xb = Math.max(xb, p[0]); ya = Math.min(ya, p[1]); yb = Math.max(yb, p[1]);
+    b[0] = Math.min(b[0], p[0]); b[1] = Math.max(b[1], p[0]); b[2] = Math.min(b[2], p[1]); b[3] = Math.max(b[3], p[1]);
   });
-  var z0 = Math.min(1, (Gx1 - Gx0) / ((xb - xa) * sx), (Gy1 - Gy0) / ((yb - ya) * sy));
-  if (z0 > 0.999) return zoomBase();
-  var margine = 0.86 + 0.14 * Math.max(0, (z0 - 0.7) / 0.3);   // si stacca dal bordo senza scatti
-  return { z: z0 * margine, x0: (xa + xb) / 2, y0: (ya + yb) / 2, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 };
+  return b;
+}
+function zoomPerContenere(pts) {
+  var b = scatola(pts);
+  var z0 = Math.min(1, (Gx1 - Gx0) / ((b[1] - b[0]) * sx), (Gy1 - Gy0) / ((b[3] - b[2]) * sy));
+  return z0 * (0.86 + 0.14 * Math.max(0, (z0 - 0.7) / 0.3));   // margine dal bordo, che arriva senza scatti
+}
+function stannoInVista(pts) { return zoomPerContenere(pts) >= ZMIN * 0.999; }
+function vistaCheContiene(pts) {
+  var z = zoomPerContenere(pts);
+  if (z > 0.999) return zoomBase();
+  z = Math.max(ZMIN, z);
+  var b = scatola(pts), cx = (b[0] + b[1]) / 2, cy = (b[2] + b[3]) / 2;
+  // col tetto allo zoom non ci sta tutto: il centro si sposta il meno possibile dal quaderno di partenza
+  var hw = (Gx1 - Gx0) / 2 / (z * sx), hh = (Gy1 - Gy0) / 2 / (z * sy);
+  var a0 = visA(), a1 = visB(), c0 = (oy - Gy1) / sy, c1 = (oy - Gy0) / sy;
+  cx = Math.max(a1 - hw, Math.min(a0 + hw, cx));
+  cy = Math.max(c1 - hh, Math.min(c0 + hh, cy));
+  return { z: z, x0: cx, y0: cy, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 };
 }
 function adattaVista(g) {
   var pts = [];
@@ -350,8 +368,13 @@ COSTRUTTORI.limiti = function (g, F) {
     P.push(Di(chi, 'Vado verso ' + (s > 0 ? 'più' : 'meno') + ' infinito, sempre più lontano, e grido la mia quota', false, 4));
     P.push(Attendi(2.4));
     // ci si ferma quando la quota è già enorme: oltre, la vista si allontanerebbe tanto da non leggere più niente
-    var tappe = [x0];
-    [10, 100, 1000].forEach(function (v) { if (Math.abs(F.f(tappe[tappe.length - 1])) < 1e5) tappe.push(s * v); });
+    // le tappe che si vedono, più una che esce dal quaderno: la forma della funzione resta leggibile
+    var tappe = [x0], fuori = false;
+    [3, 5, 10, 20, 50, 100, 1000].forEach(function (v) {
+      if (fuori || v <= Math.abs(x0)) return;
+      tappe.push(s * v);
+      if (!stannoInVista([[s * v, F.f(s * v)]])) fuori = true;
+    });
     tappe.forEach(function (xv, n) {
       if (n) P.push(Tween(1.6, function (g, p) { p.x = Math.abs(g.amici[chi].x); }, function (g, u, p) {
         g.amici[chi].x = s * Math.exp(lerp(Math.log(p.x), Math.log(Math.abs(xv)), u));
@@ -382,13 +405,20 @@ COSTRUTTORI.limiti = function (g, F) {
       return Math.max(1, z);
     }
     P.push(Fai(function (g) {
-      S.zoom = { z: 1, x0: x0, y0: yc }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; g.lineaX0 = true;
+      S.zoom = { z: 1, x0: x0, y0: yc }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; g.lineaX0 = true; g.xLim = x0;
       g.adatta = L.caso === 'infinito';
     }));
     P.push(Di('sx', soloDx ? 'Io da sinistra non posso arrivare: qui la funzione non esiste!' : 'Io arrivo da sinistra!', false, 4));
     P.push(Di('dx', 'E io da destra! Ci avviciniamo a x = ' + t + ' e gridiamo la nostra quota', false, 4));
     P.push(Attendi(2.4));
-    var passiH = L.caso === 'infinito' ? [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01] : H;
+    var passiH = H;
+    if (L.caso === 'infinito') {                       // i passi che si vedono, più uno che esce dal quaderno
+      passiH = [];
+      [1, 0.5, 0.2, 0.1, 0.05, 0.02, 0.01].forEach(function (h) {
+        if (passiH.length && !stannoInVista([[x0 - h * 2, F.f(x0 - h * 2)], [x0 + h * 2, F.f(x0 + h * 2)]])) return;
+        passiH.push(h);
+      });
+    }
     passiH.forEach(function (h, n) {
       if (n) P.push(vai(x0 - h, x0 + h, zoomPer(h), soloDx));
       P.push(Fai(function () { if (!soloDx) grida('sx', x0 - h, h); grida('dx', x0 + h, h); }));
@@ -662,7 +692,7 @@ function disegnaAttori() {
   var g = this, F = g.F;
   if (g.modo === 'limiti') {
     if (!g.amici) return;
-    var x0 = S.zoom.x0;
+    var x0 = g.xLim;
     seme(60);
     if (g.lineaX0) linea(X(x0), Gy0 + 10, X(x0), Gy1 - 10, { col: MATITA, lw: 1, passate: 1, dash: [3, 7], amp: 0.3 });
     ['sx', 'dx'].forEach(function (chi) {
@@ -934,7 +964,7 @@ function protetti() {
       if (!fuoriY(ys)) omone([X(a.x) + (chi === 'sx' ? -10 : 10) * k, ys], k);
     });
     if (g.lineaX0) {                                  // il punto a cui si tende (il buco, il salto)
-      F.vuoti.concat(F.pieni).forEach(function (q) { if (Math.abs(q[0] - S.zoom.x0) < 1e-9) punto(q[0], q[1], 22, 10); });
+      F.vuoti.concat(F.pieni).forEach(function (q) { if (Math.abs(q[0] - g.xLim) < 1e-9) punto(q[0], q[1], 22, 10); });
     }
     return r;
   }

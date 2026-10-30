@@ -339,6 +339,8 @@ function disegnaFumetti() {
     if (ay < Gy0 - 30) { testo = '↑ ' + testo; corpo = null; }          // la freccia solo se è davvero uscito
     if (ay > Gy1 + 20) { testo = '↓ ' + testo; corpo = null; }
     ay = Math.max(Gy0 + 20, Math.min(Gy1 - 20, ay));
+    if (ax < Gx0 - 20) { testo = '← ' + testo; corpo = null; }
+    if (ax > Gx1 + 20) { testo = '→ ' + testo; corpo = null; }
     ax = Math.max(Gx0 + 10, Math.min(Gx1 - 10, ax));
     var size = 21, righe = aCapo(testo, size, 320);
     var w = 0; righe.forEach(function (r) { w = Math.max(w, larghezza(r, size)); });
