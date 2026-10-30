@@ -1129,13 +1129,16 @@ function striscia(xa, xb, ya, yb) {
   if (xb - xa < 2 || yb - ya < 2) return null;
   return [[xa, ya], [xb, ya], [xb, yb], [xa, yb]];
 }
+/** Fin dove arriva un giro: un giro finito vale per tutta la retta, anche oltre il quaderno di partenza. */
+function finoA(id) { return S.fatto[id] ? INF : S.prog[id]; }
 function segniSotto() {
-  var F = S.F, A = visA(), B = visB(), pD = Math.max(S.prog.dominio, S.prog.segno), q;
+  var F = S.F, A = Math.min(visA(), invX(Gx0) - 1), B = Math.max(visB(), invX(Gx1) + 1);
+  var pD = Math.max(finoA('dominio'), finoA('segno')), q;
   fuoriDominio(F).forEach(function (iv, i) {
     var b = Math.min(iv[1], pD);
     if (b <= iv[0] || b <= A || iv[0] >= B) return;
     seme(2100 + i);
-    q = striscia(X(Math.max(iv[0], A - 1)), X(b), Gy0 - 6, Gy1 + 6);
+    q = striscia(X(Math.max(iv[0], A)), X(Math.min(b, B)), Gy0 - 6, Gy1 + 6);
     if (q) tratteggio(q, { col: VIOLA, sp: 9, alpha: 0.6, lw: 1.4, ang: 0.85 });
   });
   F.esclusi.forEach(function (e, i) {
@@ -1151,23 +1154,24 @@ function segniSotto() {
     linea(Gx0, yy - 3, Gx1, yy - 3, { col: ROSSO, lw: 1.4, passate: 1, dash: [10, 7], amp: 0.4, passo: 40 });
     scrivi('y = ' + fmt(y), Gx1 - 10, yy - 12, 17, ROSSO, 0, 'right');
   });
-  var pS = S.prog.segno;
+  var pS = finoA('segno');
   if (pS === -INF) return;
   terraETunnel(F, A, Math.min(B, pS));
   var y0 = Math.max(Gy0 - 6, Math.min(Gy1 + 6, Y(0)));
   riga(F, 'segno', A, B).segs.forEach(function (s, i) {
     if (!(s.s === 1 || s.s === -1) || s.a >= pS) return;
     seme(2300 + i);
-    q = s.s > 0 ? striscia(X(s.a), X(Math.min(s.b, pS)), y0, Gy1 + 6) : striscia(X(s.a), X(Math.min(s.b, pS)), Gy0 - 6, y0);
+    var xb = X(Math.min(s.b, pS, B));
+    q = s.s > 0 ? striscia(X(s.a), xb, y0, Gy1 + 6) : striscia(X(s.a), xb, Gy0 - 6, y0);
     if (q) tratteggio(q, { col: VIOLA, sp: 8, alpha: 0.6, lw: 1.4, ang: -0.85 });
   });
 }
 function segniSopra() {
   var F = S.F;
   seme(2500);
-  F.zeri.forEach(function (z) { if (S.prog.segno >= z.x) puntino(X(z.x), Y(0), 4.6, ROSSO); });
+  F.zeri.forEach(function (z) { if (finoA('segno') >= z.x) puntino(X(z.x), Y(0), 4.6, ROSSO); });
   F.staz.forEach(function (p) {
-    if (S.prog.derivata < p.x) return;
+    if (finoA('derivata') < p.x) return;
     var x = X(p.x), y = Y(F.f(p.x));
     linea(x, y, x, Y(0), { col: MATITA, lw: 1, passate: 1, dash: [4, 5], amp: 0.3 });
     ellisse(x, y, 12, 12, { col: ROSSO, lw: 1.7 });
@@ -1181,19 +1185,44 @@ function segniSopra() {
   });
 }
 function larghezzaTavola(testo) { return larghezza(testo, 20) + 18; }
+var CORSA = 240;                                       // velocità dei cartelli in fuga, unità al secondo
+function eInfinito(c) { return c.testo === '(−∞' || c.testo === '+∞)'; }
 function disegnaCartelli() {
   S.cartelli.forEach(function (c, i) {
     var k = Math.min(1, (CLOCK - c.t0) / 0.25), x = X(c.x) + c.lato * (eMuro(S.F, c.x) && muroVisibile() ? MURO_L + 6 : 3), y = Y(0);
+    var corre = false;
+    if (eInfinito(c)) {                               // lo scarto dal punto piantato insegue il bordo del quaderno
+      var bordo = c.lato > 0 ? Gx0 + 14 + 3 : Gx1 - 14 - 3, voluto = bordo - x;
+      if (c.off === undefined) { c.off = voluto; c.tl = CLOCK; }
+      var dt = Math.max(0, CLOCK - c.tl), passo = CORSA * dt;
+      c.tl = CLOCK;
+      var gap = Math.abs(voluto - c.off);
+      if (gap > 25) c.corre = true;                   // le piccole correzioni della vista non lo fanno partire
+      if (c.corre && gap > passo) { c.dir = Math.sign(voluto - c.off); c.off += passo * c.dir; corre = true; }
+      else { c.off = c.corre || gap < 25 ? voluto : c.off; c.corre = false; }
+      x += c.off;
+    }
     if (k <= 0) return;
     seme(3000 + i);
     ctx.save();
     ctx.translate(x, y); ctx.scale(k, k);
+    if (corre) {                                      // le gambine: il cartello si alza e corre
+      var f = CLOCK * 18, sw = Math.sin(f) * 6;
+      tratto([[0, -10], [sw, 2], [sw + 3 * c.dir, 2]], { col: BLU, lw: 1.6, passo: 4 });
+      tratto([[0, -10], [-sw, 2], [-sw + 3 * c.dir, 2]], { col: BLU, lw: 1.6, passo: 4 });
+      ctx.translate(0, -12 - Math.abs(Math.sin(f)) * 3);
+    }
     linea(0, 2, 0, -50, { col: '#8a5a2b', lw: 2.2 });
     var w = larghezzaTavola(c.testo), bx = c.lato > 0 ? -4 : -w + 4;
     var tav = [[bx, -76], [bx + w, -78], [bx + w, -50], [bx, -48]];
     riempi(tav, 'rgba(255, 220, 120, 0.55)');
     tratto(tav, { chiuso: true, lw: 1.6, col: '#8a5a2b', passo: 9 });
     scrivi(c.testo, bx + w / 2, -56, 20, BLU, 0, 'center');
+    if (corre) {                                      // e due occhietti che spuntano sopra la tavola
+      ctx.fillStyle = CARTA; ctx.beginPath(); ctx.arc(bx + w / 2 - 6, -84, 5, 0, 7); ctx.arc(bx + w / 2 + 6, -84, 5, 0, 7); ctx.fill();
+      ellisse(bx + w / 2 - 6, -84, 5, 5, { lw: 1.2, passate: 1 }); ellisse(bx + w / 2 + 6, -84, 5, 5, { lw: 1.2, passate: 1 });
+      puntino(bx + w / 2 - 6 + 2 * c.dir, -84, 1.8); puntino(bx + w / 2 + 6 + 2 * c.dir, -84, 1.8);
+    }
     ctx.restore();
   });
 }
