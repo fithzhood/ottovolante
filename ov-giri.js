@@ -309,7 +309,7 @@ COSTRUTTORI.derivata = function (g, F) {
   var P = g.passi, x0 = partenza(g, F);
   function dopo(x) { return segnoDi(F.d1(x + 1e-6)); }
   if (cerca(F.nonDer, x0)) P.push(Di('W', 'Parto in verticale: in x = ' + etichetta(F, x0) + ' la derivata non esiste. Poi ' + moto(dopo(x0)), true));
-  else P.push(Di('W', 'Ho l’asta tangente: leggo la pendenza. Ora ' + moto(dopo(x0))));
+  else P.push(Di('W', 'Tengo la lancia parallela alla tangente: mi dice la pendenza. Ora ' + moto(dopo(x0))));
   eventi(F, x0, g.B, ['staz', 'esclusi', 'salti', 'nonDer']).forEach(function (e, i, tutti) {
     var t = etichetta(F, e.x), d = 16 / sx;
     if (e.tipo === 'staz') {
@@ -499,13 +499,19 @@ function testa(x, y, c, amico) {
 function carrello(xs, ys, ang, conAsta, conTrivella) {
   ctx.save(); ctx.translate(xs, ys); ctx.rotate(ang);
   seme(31);
-  if (conAsta) linea(-110, 0, 110, 0, { col: ROSSO, lw: 2.4, amp: 0.4, passo: 30 });
+  if (conAsta) linea(-150, 0, 150, 0, { col: MATITA, lw: 1, passate: 1, amp: 0.3, dash: [6, 6], passo: 40, alpha: 0.6 });
   ctx.scale(OMINO, OMINO);
   if (conTrivella) trivella();
   evidenzia([[2, -36], [2, -24]], 10, GIALLO);
   tratto([[2, -37], [2, -22]], { lw: 1.8 });
-  tratto([[2, -32], [-8, -44], [-12, -51]], { lw: 1.6, passo: 5 });
-  tratto([[2, -32], [13, -27]], { lw: 1.6 });
+  if (conAsta) {                                      // in sella con la lancia in resta, parallela alla tangente
+    tratto([[2, -32], [-6, -30], [-4, -27]], { lw: 1.6, passo: 5 });
+    tratto([[2, -32], [10, -29], [14, -27]], { lw: 1.6, passo: 5 });
+    lancia();
+  } else {
+    tratto([[2, -32], [-8, -44], [-12, -51]], { lw: 1.6, passo: 5 });
+    tratto([[2, -32], [13, -27]], { lw: 1.6 });
+  }
   testa(3, -46, BLU, false);
   var corpo = [[-19, -9], [19, -9], [23, -28], [-23, -28]];
   riempi(corpo, 'rgba(255, 210, 60, 0.55)');
@@ -513,6 +519,26 @@ function carrello(xs, ys, ang, conAsta, conTrivella) {
   linea(-21, -19, 21, -19, { lw: 1, passate: 1 });
   ellisse(-11, -5, 5, 5, { lw: 1.6 }); ellisse(11, -5, 5, 5, { lw: 1.6 });
   ctx.restore();
+}
+
+/** La lancia da torneo: impugnatura dietro la mano, rondella a cono che para la mano, asta a strisce
+ *  che si assottiglia fino alla punta. Coordinate dell'omino (y = −27 è l'altezza della mano). */
+function lancia() {
+  var y = -27, coda = -34, mano = 12, cono = 30, punta = 112;
+  seme(33);
+  var asta = [[cono, y - 4.2], [punta, y - 0.6], [punta + 6, y], [punta, y + 0.6], [cono, y + 4.2]];
+  riempi(asta, 'rgba(250, 244, 230, 0.95)');
+  for (var x = cono + 4; x < punta - 6; x += 12) {     // le strisce rosse a spirale
+    var t0 = (x - cono) / (punta - cono), t1 = (x + 6 - cono) / (punta - cono);
+    riempi([[x, y - 4.2 * (1 - t0) - 0.6 * t0], [x + 6, y - 4.2 * (1 - t1) - 0.6 * t1], [x + 2, y + 4.2 * (1 - t1) + 0.6 * t1], [x - 4, y + 4.2 * (1 - t0) + 0.6 * t0]], 'rgba(196, 33, 43, 0.75)');
+  }
+  tratto(asta, { lw: 1.4, passo: 10, amp: 0.4 });
+  riempi([[coda, y - 2.4], [cono, y - 2.4], [cono, y + 2.4], [coda, y + 2.4]], 'rgba(138, 90, 43, 0.85)');
+  tratto([[coda, y - 2.4], [cono, y - 2.4]], { col: '#5a3a1b', lw: 1.1, passate: 1, amp: 0.3 });
+  tratto([[coda, y + 2.4], [cono, y + 2.4]], { col: '#5a3a1b', lw: 1.1, passate: 1, amp: 0.3 });
+  var rondella = [[mano + 4, y - 3], [cono, y - 10], [cono + 2, y], [cono, y + 10], [mano + 4, y + 3]];
+  riempi(rondella, 'rgba(160, 165, 180, 0.85)');
+  tratto(rondella, { chiuso: true, col: '#3c3c48', lw: 1.3, passo: 6, amp: 0.3 });
 }
 
 /** La concavità: dal binario salgono le fiamme, nei flessi ci sono le piattaforme. L'omino passa da una
@@ -527,25 +553,22 @@ function pianoConcavita(g) {
   var F = g.F, zone = [];
   riga(F, 'concavita', g.A, g.B).segs.forEach(function (z) {
     if (!(z.s === 1 || z.s === -1)) return;
-    // il tratto più lungo della zona in cui c'è posto per l'omino sopra il binario
+    // il tratto della zona che si vede nel quaderno: le piattaforme stanno ai suoi due capi (un flesso,
+    // il bordo del quaderno, o il punto in cui il binario esce verso un asintoto)
     var n = 400, run = null, best = null, i, x, q;
     for (i = 0; i <= n; i++) {
       x = lerp(z.a, z.b, i / n);
       if (i === 0) x += 1e-6 * Math.max(1, Math.abs(x));
       if (i === n) x -= 1e-6 * Math.max(1, Math.abs(x));
       q = Y(F.f(x));
-      var ok = isFinite(q) && q > Gy0 + 95 && q < Gy1 - 25 && X(x) > Gx0 + 30 && X(x) < Gx1 - 30;
+      var ok = isFinite(q) && q > Gy0 + 14 && q < Gy1 - 10 && X(x) > Gx0 + 24 && X(x) < Gx1 - 24;
       if (ok) { if (!run) run = [x, x]; else run[1] = x; }
       if (!ok || i === n) { if (run && (!best || X(run[1]) - X(run[0]) > X(best[1]) - X(best[0]))) best = run; run = null; }
     }
-    if (!best || X(best[1]) - X(best[0]) < 80) return;
-    var zz, k, inizioLibero = !cerca(F.flessi, z.a);
-    for (k = 0; k < 7; k++) {
-      var xa = lerp(best[0], best[1], k * 0.07);
-      zz = { a: z.a, b: z.b, s: z.s, xa: xa, xb: best[1], S: [X(xa), Y(F.f(xa))], E: [X(best[1]), Y(F.f(best[1]))] };
-      if (z.s > 0) pianoLiana(F, zz); else pianoAsta(F, zz);
-      if (zz.buono || !inizioLibero) break;
-    }
+    if (!best || X(best[1]) - X(best[0]) < 40) return;
+    var zz = { a: z.a, b: z.b, s: z.s, xa: best[0], xb: best[1],
+               S: [X(best[0]), Y(F.f(best[0]))], E: [X(best[1]), Y(F.f(best[1]))] };
+    if (z.s > 0) pianoLiana(F, zz); else pianoAsta(F, zz);
     zone.push(zz);
   });
   return zone;
@@ -1131,6 +1154,13 @@ function protetti() {
   box(p[0] - 24, p[1] - 24, 48, 48);                  // il punto del binario di cui si sta parlando
   if (g.modo === 'asse') { omone(p); return r; }
   box(p[0] - 42, p[1] - 86, 84, 94);                  // carrello con l'omino
-  if (g.id === 'derivata') box(p[0] - 52, p[1] + 34, 104, 30, 6);
+  if (g.id === 'derivata') {
+    box(p[0] - 52, p[1] + 34, 104, 30, 6);
+    var an = Math.atan2(-pendenza(F, g.W.x) * sy, sx), c = Math.cos(an), s = Math.sin(an);
+    for (var d = 0; d <= 150; d += 30) {             // la lancia, a tratti lungo la tangente
+      var lx = p[0] + c * d * OMINO / 1.3 * 1.3 + s * 35, ly = p[1] + s * d - c * 35;
+      box(lx - 14, ly - 14, 28, 28, 6);
+    }
+  }
   return r;
 }

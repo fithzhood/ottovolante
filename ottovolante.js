@@ -40,8 +40,8 @@ function impagina() {
   NOTEW = Math.max(220, Math.min(300, VW * 0.2));
   TAB0 = VH - (RIGA0 + 4 * RIGAH) - 12;
   Gx0 = NOTEW + 28; Gx1 = VW - 20; Gy0 = 12; Gy1 = TAB0 - 10;
-  $('btnRiprendi').style.left = ((Gx0 + Gx1) / 2 * U) + 'px';
-  $('btnRiprendi').style.top = ((Gy0 + Gy1) / 2 * U) + 'px';
+  $('btnRiprendi').style.left = ((Gx0 + Gx1) / 2 * U) + 'px';    // sulla tabella dei segni, in fondo
+  $('btnRiprendi').style.top = ((VH - 30) * U) + 'px';
   calcolaVista();
   preparaFondo();
 }
@@ -352,11 +352,6 @@ function formaFumetto(testo) {
 function disegnaFumetti() {
   S.fumetti = S.fumetti.filter(function (b) { return GT - b.t0 < b.dur; });
   var protetti = S.giro && S.giro.protetti ? S.giro.protetti() : [], posati = [];
-  var bt = $('btnRiprendi');                         // il pulsante "continua" non va coperto
-  if (!bt.hidden) {
-    var bw = bt.offsetWidth / U + 16, bh = bt.offsetHeight / U + 16;
-    posati.push([(Gx0 + Gx1) / 2 - bw / 2, (Gy0 + Gy1) / 2 - bh / 2, bw, bh]);
-  }
   S.fumetti.forEach(function (b, n) {
     var an = S.giro && S.giro.ancora(b.chi);
     if (!an) return;
