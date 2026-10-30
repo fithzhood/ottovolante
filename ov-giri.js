@@ -1069,7 +1069,7 @@ function segniSotto() {
     if (b <= iv[0] || b <= A || iv[0] >= B) return;
     seme(2100 + i);
     q = striscia(X(Math.max(iv[0], A - 1)), X(b), Gy0 - 6, Gy1 + 6);
-    if (q) tratteggio(q, { col: MATITA, sp: 9, alpha: 0.42, ang: 0.85 });
+    if (q) tratteggio(q, { col: VIOLA, sp: 9, alpha: 0.6, lw: 1.4, ang: 0.85 });
   });
   F.esclusi.forEach(function (e, i) {
     if (!muroVisibile(F, e)) return;
@@ -1092,7 +1092,7 @@ function segniSotto() {
     if (!(s.s === 1 || s.s === -1) || s.a >= pS) return;
     seme(2300 + i);
     q = s.s > 0 ? striscia(X(s.a), X(Math.min(s.b, pS)), y0, Gy1 + 6) : striscia(X(s.a), X(Math.min(s.b, pS)), Gy0 - 6, y0);
-    if (q) tratteggio(q, { col: MATITA, sp: 8, alpha: 0.42, ang: -0.85 });
+    if (q) tratteggio(q, { col: VIOLA, sp: 8, alpha: 0.6, lw: 1.4, ang: -0.85 });
   });
 }
 function segniSopra() {
