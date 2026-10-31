@@ -228,6 +228,7 @@ function disegnaTabella() {
   });
   scrivi('x', Gx0 - 14, yTop + 20, 20, BLU, 0, 'right');
   linea(Gx0 - 50, yTop + 28, Gx1, yTop + 28, { lw: 1.2, passate: 1, col: MATITA, amp: 0.4, passo: 40 });
+  S.etichetteTab = tutti.map(function (x) { return [Xb(x), larghezza(etichetta(F, x), 18)]; });
   tutti.forEach(function (x) {
     scrivi(etichetta(F, x), Xb(x), yTop + 20, 18, BLU, 0, 'center');
     linea(Xb(x), yTop + 30, Xb(x), yFine, { lw: 0.9, passate: 1, col: MATITA, amp: 0.3, dash: [5, 5] });
@@ -428,6 +429,7 @@ function disegna() {
   segniSopra();
   ctx.restore();
   disegnaTabella();
+  posaRiprendi();
   ctx.restore();
   ctx.save();
   ctx.beginPath(); ctx.rect(Gx0 - 4, Gy0 - 4, Gx1 - Gx0 + 8, Gy1 - Gy0 + 8); ctx.clip();
@@ -475,9 +477,20 @@ function aggiornaComandi() {
   $('chkPausa').checked = S.autoPausa;
 }
 /** Il pulsante "continua" sta subito sotto il grafico, al centro. */
+/** Il pulsante "continua il giro" sta subito sotto il grafico, il più vicino possibile al centro
+ *  ma senza coprire le etichette della tabella (le x dei punti notevoli). */
 function posaRiprendi() {
   var b = $('btnRiprendi');
-  b.style.left = ((Gx0 + Gx1) / 2 * U) + 'px';
+  if (b.hidden) return;
+  var w = (b.offsetWidth || 200) / U, cx = (Gx0 + Gx1) / 2, et = S.etichetteTab || [], scelta = cx;
+  function libera(x) {
+    return et.every(function (e) { return Math.abs(e[0] - x) > w / 2 + Math.max(e[1] / 2, 26) + 12; });   // anche le ∄ accanto
+  }
+  for (var d = 0; d < Gx1 - Gx0; d += 10) {
+    if (cx - d - w / 2 > Gx0 && libera(cx - d)) { scelta = cx - d; break; }
+    if (cx + d + w / 2 < Gx1 && libera(cx + d)) { scelta = cx + d; break; }
+  }
+  b.style.left = (scelta * U) + 'px';
   b.style.top = ((Gy1 + 6) * U + (b.offsetHeight || 40) / 2) + 'px';
 }
 function playPausa() {
