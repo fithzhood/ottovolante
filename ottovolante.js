@@ -16,7 +16,8 @@ var S = {
   play: false, ff: false, autoPausa: true, vel: 1,
   zoom: { z: 1, x0: 0, y0: 0 }, fumetti: []
 };
-var CLOCK = 0, GT = 0;     // orologio vero (per il tremolio) e tempo di gioco (si ferma in pausa)
+var CLOCK = 0, GT = 0;
+var MOTO_RIDOTTO = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);     // orologio vero (per il tremolio) e tempo di gioco (si ferma in pausa)
 
 function paginaPulita() {
   IDGIRI.forEach(function (id) { S.prog[id] = -INF; S.fatto[id] = false; });
@@ -459,11 +460,11 @@ function aggiornaComandi() {
   document.querySelectorAll('#giri button').forEach(function (b) {
     var id = b.getAttribute('data-giro');
     b.disabled = !haGiro(F, id);
-    b.title = b.disabled ? 'È una retta: non ha curvatura' : '';
+    b.title = b.disabled ? 'Il grafico è fatto solo di tratti di retta: non c’è concavità da studiare' : '';
     b.classList.toggle('attivo', !!(S.giro && S.giro.id === id));
   });
   $('btnPlay').textContent = S.play ? '⏸' : '▶';
-  $('btnPlay').title = S.play ? 'Pausa (spazio)' : 'Avanti (spazio)';
+  $('btnPlay').title = S.play ? 'Ferma il giro (spazio)' : 'Riprende il giro (spazio)';
   var c = !S.giro || S.giro.finito;
   $('btnPlay').disabled = c; $('btnNext').disabled = c;
   $('btnRifai').disabled = !S.giro;
@@ -522,7 +523,7 @@ function costruisciMenu() {
 var ultimo = 0, eraPlay = null, eraFinito = null;
 function passo(dt, muto) {
   CLOCK += dt;
-  BOIL = Math.floor(CLOCK * 9);
+  BOIL = MOTO_RIDOTTO ? 0 : Math.floor(CLOCK * 9);
   if (S.giro) S.giro.aggiorna(dt);
   var fin = !!(S.giro && S.giro.finito);
   if (S.play !== eraPlay || fin !== eraFinito) { eraPlay = S.play; eraFinito = fin; aggiornaComandi(); }

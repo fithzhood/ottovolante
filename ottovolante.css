@@ -45,10 +45,10 @@ button {
   padding: 0.12em 0.7em;
   min-height: 40px;
   white-space: nowrap;
-  transition: transform 0.08s;
+  transition: background-color 0.12s;
 }
-button:hover:not(:disabled) { transform: rotate(-1deg) scale(1.03); }
-button:active:not(:disabled) { transform: scale(0.97); }
+button:hover:not(:disabled) { background: #fff6c4; }       /* una passata di evidenziatore, niente zoom */
+button:active:not(:disabled) { transform: translateY(1px); }
 button:disabled { opacity: 0.35; cursor: default; }
 button.attivo { background: var(--evidenziatore); }
 
@@ -103,6 +103,10 @@ button.attivo { background: var(--evidenziatore); }
 }
 #btnRiprendi[hidden] { display: none; }
 #btnRiprendi .freccia { color: var(--rosso); font-size: 1.15em; }
-#btnRiprendi:hover { transform: translate(-50%, -50%) rotate(-1deg) scale(1.05); }
-#btnRiprendi:active { transform: translate(-50%, -50%) scale(0.96); }
+#btnRiprendi:active { transform: translate(-50%, calc(-50% + 1px)); }
 @keyframes compare { from { opacity: 0; transform: translate(-50%, -50%) scale(0.8); } }
+
+@media (prefers-reduced-motion: reduce) {
+  #btnRiprendi { animation: none; }
+  button { transition: none; }
+}

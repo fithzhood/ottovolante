@@ -15,7 +15,7 @@ var BLU = '#1c3591', ROSSO = '#c4212b', MATITA = '#5a5a60', VERDE_INK = '#1f7a3a
 var GIALLO = 'rgba(255, 232, 40, 0.50)', VERDE = 'rgba(150, 235, 70, 0.55)',
     ROSA = 'rgba(255, 120, 190, 0.42)', AZZURRO = 'rgba(110, 200, 255, 0.50)',
     ROSSO_EV = 'rgba(245, 80, 80, 0.42)';
-var CARTA = '#f7f4ec';
+var CARTA = '#f7f4ec';                 // tic-ok: V07 è la carta del quaderno (DESIGN.md)
 var VIOLA = '#a020c8';                // le zone escluse: acceso, non si confonde col terriccio
 var FONT = 'Gloria, "Segoe Print", "Comic Sans MS", cursive';
 

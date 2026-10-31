@@ -282,7 +282,7 @@ COSTRUTTORI.dominio = function (g, F) {
       P.push(Cammina(iv.a - 26 / sx));
       t = etichetta(F, iv.a);
       P.push(pianta(iv.a, (iv.aIn ? '[' : '(') + t, 1));
-      P.push(Di('W', iv.aIn ? 'Qui il binario comincia, e x = ' + t + ' c’è: parentesi quadra!'
+      P.push(Di('W', iv.aIn ? 'Qui il binario comincia, e x = ' + t + ' c’è: parentesi quadra'
                             : 'Qui il binario comincia, ma x = ' + t + ' è escluso: parentesi tonda', true));
     } else if (n === 0) {
       g.W.x = x = A + largo('(−∞');
@@ -292,7 +292,7 @@ COSTRUTTORI.dominio = function (g, F) {
     F.salti.forEach(function (s) {
       if (s.x > Math.max(iv.a, A) && s.x < Math.min(iv.b, B)) {
         P.push(Cammina(s.x), posa('perplesso'));
-        P.push(Di('W', 'Il binario qui salta… ma un punto c’è: il dominio continua!', true));
+        P.push(Di('W', 'Il binario qui salta… ma un punto c’è: il dominio continua', true));
         P.push(Attendi(0.6), posa('cammina'));
       }
     });
@@ -310,12 +310,12 @@ COSTRUTTORI.dominio = function (g, F) {
         ? 'Un muro! In x = ' + t + ' c’è un asintoto: qui la funzione non esiste'
         : 'Un buco! In x = ' + t + ' la funzione non esiste', true));
       if (esc && esc.tipo === 'asintoto') {
-        P.push(Di('W', 'È un muro infinito, in alto e in basso: non si scavalca! Ci giro intorno passandoci dietro…', false, 4.5));
+        P.push(Di('W', 'È un muro infinito, in alto e in basso: non si scavalca. Ci giro intorno passandoci dietro…', false, 4.5));
         P.push(Attendi(1.2), Aggira(iv.b + largo('(' + t)), pianta(iv.b, '(' + t, 1));
-        P.push(Di('W', 'Eccomi dall’altra parte! Pianto un altro cartello e riparto'));
+        P.push(Di('W', 'Eccomi dall’altra parte: pianto un altro cartello e riparto'));
       } else {
         P.push(Salta(iv.b + largo('(' + t)), pianta(iv.b, '(' + t, 1));
-        P.push(Di('W', 'Lo salto, pianto un altro cartello e riparto!'));
+        P.push(Di('W', 'Lo salto, pianto un altro cartello e riparto'));
       }
       x = iv.b + largo('(' + t);
     } else {
@@ -325,7 +325,7 @@ COSTRUTTORI.dominio = function (g, F) {
     }
   });
   if (x < B - 1e-9) P.push(Cammina(B));
-  P.push(Fai(fine), Di('W', 'Fine! Il dominio è: ' + F.appunti.dominio, true, 6));
+  P.push(Fai(fine), Di('W', 'Fine del giro. Il dominio è ' + F.appunti.dominio, true, 6));
 };
 
 // ── Il segno: sul carrello, sopra o sotto il suolo ──
@@ -341,16 +341,16 @@ COSTRUTTORI.segno = function (g, F) {
   function prima(x) { return segnoDi(F.f(x - 1e-6)); }
   function dopo(x) { return segnoDi(F.f(x + 1e-6)); }
   if (cerca(F.zeri, x0)) P.push(Di('W', 'Parto da quota zero… e poi sono ' + sopraSotto(dopo(x0)), true));
-  else P.push(Di('W', 'Si parte! Sono ' + sopraSotto(segnoDi(F.f(x0)))));
+  else P.push(Di('W', 'Si parte: sono ' + sopraSotto(segnoDi(F.f(x0)))));
   eventi(F, x0, g.B, ['zeri', 'esclusi', 'salti']).forEach(function (e) {
     var t = etichetta(F, e.x), a = prima(e.x), b = dopo(e.x), d = 16 / sx;
     if (e.tipo === 'zeri') {
       P.push(Cammina(e.x));
-      P.push(Di('W', a === b ? 'Sfioro il suolo e ' + (b > 0 ? 'risalgo' : 'riscendo') + ': zero doppio, il segno non cambia!'
+      P.push(Di('W', a === b ? 'Sfioro il suolo e ' + (b > 0 ? 'risalgo' : 'riscendo') + ': zero doppio, il segno non cambia'
                              : b > 0 ? 'Zero! Riemergo: ora f(x) > 0' : 'Zero! Vado sotto il suolo: ora f(x) < 0', true));
     } else if (e.tipo === 'esclusi' && e.dati.tipo === 'asintoto') {
       P.push(Cammina(bordiPortale(F, e.x)[0]));
-      P.push(Di('W', 'Asintoto in x = ' + t + ': il muro non si attraversa, prendo il portale! ' +
+      P.push(Di('W', 'Asintoto in x = ' + t + ': il muro non si attraversa, prendo il portale. ' +
         (a === b ? 'Di là sono ancora ' + (b > 0 ? 'sopra' : 'sotto') + ': il segno non cambia'
                  : 'Di là sono ' + (b > 0 ? 'sopra' : 'sotto') + ': cambio segno senza passare da zero!'), true));
       P.push(Portale(e.x));
@@ -365,7 +365,7 @@ COSTRUTTORI.segno = function (g, F) {
         : 'Il binario salta ' + (b2 > 0 ? 'sopra' : 'sotto') + ' il suolo: cambio segno senza passare da zero!', true));
     }
   });
-  P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa! Il segno è tutto nella tabella', true));
+  P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa: ' + F.appunti.segno, true, 6));
 };
 
 // ── La derivata: sul carrello, con l'asta tangente ──
@@ -381,7 +381,7 @@ COSTRUTTORI.derivata = function (g, F) {
     var t = etichetta(F, e.x), d = 16 / sx;
     if (e.tipo === 'staz') {
       P.push(Cammina(e.x));
-      P.push(Di('W', 'In piano! f′(x) = 0: ' + (e.dati.tipo === 'max' ? 'un massimo. Ora scendo' : 'un minimo. Ora salgo'), true));
+      P.push(Di('W', 'In piano: f′(x) = 0, ' + (e.dati.tipo === 'max' ? 'un massimo. Ora scendo' : 'un minimo. Ora salgo'), true));
     } else if (e.tipo === 'esclusi' && e.dati.tipo === 'asintoto') {
       P.push(Cammina(bordiPortale(F, e.x)[0]));
       P.push(Di('W', 'Asintoto: in x = ' + t + ' la derivata non esiste. Prendo il portale, e di là ' + moto(dopo(e.x)), true));
@@ -398,8 +398,8 @@ COSTRUTTORI.derivata = function (g, F) {
     }
   });
   if (g.bers) P.push(Cammina(g.B), Fai(function (g) { g.bers.colpito = CLOCK; }), Fai(fine),
-                     Di('W', 'Centro! Fine corsa: crescenza e decrescenza sono nella tabella', true));
-  else P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa! Crescenza e decrescenza sono nella tabella', true));
+                     Di('W', 'Centro! Fine corsa: ' + (F.appunti.derivata || 'crescenza e decrescenza sono nella tabella'), true, 6));
+  else P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa: ' + (F.appunti.derivata || 'crescenza e decrescenza sono nella tabella'), true, 6));
 };
 
 // ── I limiti: due amici, uno da sinistra e uno da destra, gridano la loro quota ──
@@ -474,8 +474,8 @@ COSTRUTTORI.limiti = function (g, F) {
       S.zoom = { z: 1, x0: x0, y0: yc }; g.amici = { sx: { x: x0 - 1 }, dx: { x: x0 + 1 } }; g.lineaX0 = true; g.xLim = x0;
       g.adatta = L.caso === 'infinito';
     }));
-    P.push(Di('sx', soloDx ? 'Io da sinistra non posso arrivare: qui la funzione non esiste!' : 'Io arrivo da sinistra!', false, 4));
-    P.push(Di('dx', 'E io da destra! Ci avviciniamo a x = ' + t + ' e gridiamo la nostra quota', false, 4));
+    P.push(Di('sx', soloDx ? 'Io da sinistra non posso arrivare: qui la funzione non esiste' : 'Io arrivo da sinistra', false, 4));
+    P.push(Di('dx', 'E io da destra. Ci avviciniamo a x = ' + t + ' e gridiamo la nostra quota', false, 4));
     P.push(Attendi(2.4));
     var passiH = H;
     if (L.caso === 'infinito') {                       // solo i passi in cui gli omini si vedono ancora
@@ -494,7 +494,7 @@ COSTRUTTORI.limiti = function (g, F) {
     var zf = zoomPer(0.001), ris;
     if (L.caso === 'continua') {
       P.push(vai(x0, x0, zf));
-      P.push(Di('sx', 'Ci siamo incontrati!', false, 6));
+      P.push(Di('sx', 'Ci siamo incontrati', false, 6));
       P.push(Di('dx', 'lim = f(' + t + ') = ' + L.val, true));
       ris = 'lim x→' + t + ' f(x) = ' + L.val;
     } else if (L.caso === 'buco') {
@@ -504,14 +504,14 @@ COSTRUTTORI.limiti = function (g, F) {
       P.push(Di('dx', 'lim = ' + L.val + ', però f(' + t + ') non esiste', true));
       ris = 'lim x→' + t + ' f(x) = ' + L.val + ' (ma f(' + t + ') non esiste)';
     } else if (L.caso === 'salto') {
-      P.push(Di('sx', 'Io dico ' + L.sx + '!', false, 6));
+      P.push(Di('sx', 'Io dico ' + L.sx, false, 6));
       P.push(Attendi(0.8));
-      P.push(Di('dx', 'Io dico ' + L.dx + '! Non ci incontriamo: il limite non esiste', true));
+      P.push(Di('dx', 'E io ' + L.dx + '. Non ci incontriamo: il limite non esiste', true));
       ris = 'x→' + t + '⁻: ' + L.sx + ',  x→' + t + '⁺: ' + L.dx + ' → il limite non esiste';
     } else if (L.caso === 'infinito') {
-      P.push(Di('sx', 'Se continuo così ' + vaVerso(L.sx) + '!', false, 6));
+      P.push(Di('sx', 'Se continuo così ' + vaVerso(L.sx), false, 6));
       P.push(Attendi(0.8));
-      P.push(Di('dx', 'E io ' + vaVerso(L.dx) + '! ' + (L.sx === L.dx ? 'Tutti e due: lim = ' + L.dx : 'Infiniti diversi: il limite non esiste'), true));
+      P.push(Di('dx', 'E io ' + vaVerso(L.dx) + '. ' + (L.sx === L.dx ? 'Tutti e due: lim = ' + L.dx : 'Infiniti diversi: il limite non esiste'), true));
       ris = L.sx === L.dx ? 'lim x→' + t + ' f(x) = ' + L.dx : 'x→' + t + '⁻: ' + L.sx + ',  x→' + t + '⁺: ' + L.dx + ' → il limite non esiste';
     } else {
       P.push(vai(x0, x0, zf, true));
@@ -941,13 +941,13 @@ COSTRUTTORI.concavita = function (g, F) {
   if (!Z.length) { P.push(Fai(fine), Di('W', 'Qui il binario esce dal quaderno: la concavità è nella tabella', true)); return; }
   g.W.x = Z[0].xa;
   P.push(Fai(function (g) { g.att = { fase: 'fermo', z: Z[0], lato: 'S' }; g.W.x = Z[0].xa; }));
-  P.push(Di('W', 'Il binario brucia! Passo da una piattaforma all’altra senza toccare le fiamme. Prendo ' + attrezzoDi(Z[0].s), false, 5));
+  P.push(Di('W', 'Il binario brucia: salto da una piattaforma all’altra senza toccare le fiamme. Prendo ' + attrezzoDi(Z[0].s), false, 5));
   P.push(Attendi(1.6));
   Z.forEach(function (z, i) {
     if (i) {
       var pr = Z[i - 1], stessa = Math.hypot(pr.E[0] - z.S[0], pr.E[1] - z.S[1]) < 12, cambia = pr.s !== z.s;
       var asintoto = F.esclusi.some(function (e) { return e.x > pr.xb && e.x < z.xa; });
-      if (asintoto) P.push(Di('W', 'Asintoto! Il muro non si attraversa: prendo il portale. Di là ' + (cambia ? 'cambio attrezzo e prendo ' : 'tengo ') + attrezzoDi(z.s), true));
+      if (asintoto) P.push(Di('W', 'Asintoto: il muro non si attraversa, prendo il portale. Di là ' + (cambia ? 'cambio attrezzo e prendo ' : 'tengo ') + attrezzoDi(z.s), true));
       else if (cerca(F.flessi, pr.b)) P.push(Di('W', 'Flesso! La concavità cambia: lascio ' + (pr.s > 0 ? 'il rampino' : 'l’asta') + ' e prendo ' + attrezzoDi(z.s), true));
       if (!stessa) P.push(Traversata(pr, z, asintoto));
     }
@@ -962,7 +962,7 @@ COSTRUTTORI.concavita = function (g, F) {
       g.att = { fase: 'fermo', z: z, lato: 'E' }; g.W.x = z.xb;
     }));
   });
-  P.push(Fai(fine), Di('W', 'Fine corsa! La concavità è nella tabella', true));
+  P.push(Fai(fine), Di('W', 'Fine corsa: ' + (F.appunti.concavita || 'la concavità è nella tabella'), true, 6));
 };
 /** Da una piattaforma alla successiva quando non coincidono (un asintoto, un tratto fuori dal quaderno). */
 function Traversata(da, a, conPortale) {
