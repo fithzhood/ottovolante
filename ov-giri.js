@@ -368,7 +368,7 @@ COSTRUTTORI.segno = function (g, F) {
   P.push(Cammina(g.B), Fai(fine), Di('W', 'Fine corsa: ' + F.appunti.segno, true, 6));
 };
 
-// ── La derivata: sul carrello, con l'asta tangente ──
+// ── La derivata: sul carrello, con la lancia parallela alla tangente ──
 function moto(s) { return s > 0 ? 'salgo: f′(x) > 0, f crescente' : s < 0 ? 'scendo: f′(x) < 0, f decrescente' : 'sono in piano'; }
 COSTRUTTORI.derivata = function (g, F) {
   var P = g.passi, x0 = partenza(g, F);
@@ -550,6 +550,9 @@ function omino(x, y, o) {
   } else if (o.posa === 'lancia') {
     tratto([[0, -29], [9, -47]], { col: c, lw: 1.6 });
     tratto([[0, -29], [-8, -21]], { col: c, lw: 1.6 });
+  } else if (o.posa === 'proiettile') {           // braccia tese sopra la testa
+    tratto([[0, -29], [-3, -52]], { col: c, lw: 1.6 });
+    tratto([[0, -29], [3, -52]], { col: c, lw: 1.6 });
   } else if (o.posa === 'raccolto') {
     tratto([[0, -29], [9, -25], [7, -19]], { col: c, lw: 1.6, passo: 5 });
     tratto([[0, -29], [7, -27], [5, -20]], { col: c, lw: 1.6, passo: 5 });
@@ -668,8 +671,8 @@ function lancia() {
 /** La concavità: dal binario salgono le fiamme, nei flessi ci sono le piattaforme. L'omino passa da una
  *  piattaforma all'altra senza toccare le fiamme, con attrezzi di lunghezza fissa:
  *  - concavità verso l'alto: lancia un rampino, si dondola lungo un arco di cerchio e lo lascia atterrando;
- *  - concavità verso il basso: pianta l'asta, sale fino al punto più alto, la lascia lì (a metà salto)
- *    e prosegue in volo con una capriola, atterrando in piedi.
+ *  - concavità verso il basso: entra nel cannone e si fa sparare lungo una parabola che passa sopra la
+ *    gobba del binario; prima di atterrare si raddrizza con una capriola e scende in piedi.
  *  Tutta la geometria è in coordinate di schermo e si calcola quando parte il giro. */
 var FIAMMA_H = 30, CL = 44;          // altezza massima delle fiamme e distanza di sicurezza dal binario
 function curvaY(F, px) { var y = F.f(invX(px)); return isFinite(y) ? Y(y) : NaN; }
@@ -697,7 +700,7 @@ function pianoConcavita(g) {
     if (!best || X(best[1]) - X(best[0]) < 40) return;
     var zz = { a: z.a, b: z.b, s: z.s, xa: best[0], xb: best[1],
                S: [X(best[0]), Y(F.f(best[0]))], E: [X(best[1]), Y(F.f(best[1]))] };
-    if (z.s > 0) pianoLiana(F, zz); else pianoAsta(F, zz);
+    if (z.s > 0) pianoLiana(F, zz); else pianoCannone(F, zz);
     zone.push(zz);
   });
   return zone;
@@ -724,7 +727,7 @@ function libero(F, pts, z) {
   return true;
 }
 /** Attorno alle piattaforme le fiamme non ci sono (anche dove il binario è ripido). */
-function vicinoPiattaforma(z, x, y) { return Math.hypot(x - z.S[0], y - z.S[1]) < 92 || Math.hypot(x - z.E[0], y - z.E[1]) < 92; }
+function vicinoPiattaforma(z, x, y) { return Math.hypot(x - z.S[0], y - z.S[1]) < (z.rS || 92) || Math.hypot(x - z.E[0], y - z.E[1]) < 92; }
 function fiammeZona(F, z) {
   if (z.fiamme) return z.fiamme;
   z.fiamme = [];
@@ -860,83 +863,135 @@ function pianoLiana(F, z) {
   };
   z.punto = function (t) { return z.stato(t).P; };
 }
-function pianoAsta(F, z) {
-  var h0 = 26 * OMINO, P0 = [z.S[0], z.S[1] - h0], Ec = [z.E[0], z.E[1] - h0], top = Math.min(P0[1], Ec[1]), i, scelto = null, primo = null, sicuro = null;
-  for (i = 0; i <= 60; i++) { var c = curvaY(F, lerp(z.S[0], z.E[0], i / 60)); if (isFinite(c)) top = Math.min(top, c - h0); }
-  for (var Ty = top - CL; Ty > Gy0 + 40 && !scelto; Ty -= 8) {
-    // si pianta a metà salto se si può; se il pavimento finirebbe sopra la partenza si pianta più avanti
-    [0.5, 0.58, 0.66, 0.74, 0.82, 0.9].forEach(function (fr) {
-      if (scelto) return;
-      var p = pianoSalto(P0, Ec, lerp(P0[0], Ec[0], fr), Ty);
-      if (!p) return;
-      if (!primo) primo = p;
-      var ok = libero(F, campioniSalto(p), z);
-      if (ok && !sicuro) sicuro = p;
-      if (ok && p.pavimentoSotto) scelto = p;
-    });
+/** Il cannone sta sulla piattaforma di partenza. La parabola è la più bassa che passa sopra le fiamme
+ *  (resta almeno CL sopra il binario): così asseconda la gobba invece di volare via. */
+var CANNA = 46;                      // lunghezza della canna, in unità dell'omino
+function pianoCannone(F, z) {
+  var h0 = 26 * OMINO, B0 = [z.S[0] - 14, z.S[1] - 13 * OMINO], Ec = [z.E[0], z.E[1] - h0], scelto = null, H, D;
+  function alto(p, n) {                              // il volo (e il paracadute) restano nel quaderno
+    return (!p.A || p.A[1] - h0 - 80 >= Gy0 + 4) && campioniSalto(p, n).every(function (q) { return q[1] >= Gy0 + 4; });
   }
-  z.buono = !!scelto;
-  scelto = scelto || sicuro || primo || pianoSalto(P0, Ec, (P0[0] + Ec[0]) / 2, Math.max(Gy0 + 40, top - CL));
-  if (scelto) {
-    var st0 = scelto.stato;
-    scelto.stato = function (t) {
-      var s = st0(t);
-      s.P = lontanoDalleFiamme(F, z, s.P, CL);
-      return s;
-    };
-  }
-  z.asta = scelto; z.len = scelto ? scelto.len : 100;
-  z.punto = function (t) { return z.asta.stato(t).P; };
-}
-function pianoSalto(P0, Ec, Tx, Ty) {
-  var d = Tx - P0[0], D = P0[1] - Ty;
-  if (d <= 5 || D <= 5 || Ec[1] <= Ty + 2 || Ec[0] <= Tx + 5) return null;
-  var Qy = (Ty + P0[1]) / 2 + d * d / (2 * D), L = Qy - Ty, al0 = Math.atan2(-d, Qy - P0[1]);
-  var k = (Ec[1] - Ty) / ((Ec[0] - Tx) * (Ec[0] - Tx)), s1 = L * Math.abs(al0), s2 = 0, prec = [Tx, Ty];
-  for (var i = 1; i <= 24; i++) {
-    var x = lerp(Tx, Ec[0], i / 24), q = [x, Ty + k * (x - Tx) * (x - Tx)];
-    s2 += Math.hypot(q[0] - prec[0], q[1] - prec[1]); prec = q;
-  }
-  var t1 = s1 / (s1 + s2);
-  return {
-    Q: [Tx, Qy], L: L, t1: t1, len: s1 + s2, pavimentoSotto: Qy > P0[1] + 26 * OMINO + 6,   // sotto i piedi di partenza
-    stato: function (t) {
-      if (t < t1) {                                  // con l'asta: si gira attorno al punto in cui è piantata
-        var u = t / t1, al = lerp(al0, 0, u);
-        return { P: [Tx + Math.sin(al) * L, Qy - Math.cos(al) * L], rot: Math.PI * u, conAsta: true, v: 0 };
+  function colpo(D, H) { return D ? conParacadute(traiettoria(B0, [z.E[0] + 22, Ec[1] - D], H), Ec) : traiettoria(B0, Ec, H); }
+  // prima un colpo dritto sulla piattaforma; se la piattaforma sta in fondo a una parete ripida nessuna parabola
+  // ci arriva senza entrare nel binario: allora il volo finisce più in alto, sopra di lei, e si scende col paracadute.
+  // Si cerca a passi larghi con pochi campioni, poi si scende al colpo più basso e lo si controlla per bene.
+  function cerca() {
+    for (D = 0; D <= Ec[1] - Gy0 - 120 && !scelto; D += D ? 30 : 60) {
+      for (H = 16; H < 1200 && !scelto; H += 16) {
+        if (!alto(colpo(D, H), 20)) break;
+        if (!sparoLibero(F, z, colpo(D, H), 20)) continue;
+        for (var h = Math.max(16, H - 12); h <= H && !scelto; h += 4) {
+          var p = colpo(D, h);
+          if (alto(p) && sparoLibero(F, z, p)) scelto = p;
+        }
       }
-      var v = (t - t1) / (1 - t1), x = lerp(Tx, Ec[0], v);   // in volo: una parabola, e la capriola
-      return { P: [x, Ty + k * (x - Tx) * (x - Tx)], rot: Math.PI * (1 + v), conAsta: false, v: v };
+    }
+  }
+  cerca();
+  // se il cannone sta ai piedi di una parete quasi verticale (accanto a un asintoto) le fiamme gli sarebbero
+  // proprio sopra la bocca: lì il fuoco comincia un po' più in alto
+  if (!scelto) { z.rS = 150; z.fiamme = z.colonne = z.binario = null; cerca(); if (!scelto) { z.rS = 92; z.fiamme = z.colonne = z.binario = null; } }
+  z.buono = !!scelto;
+  if (!scelto) {                                     // nessun colpo pulito che stia nel quaderno: il più lontano dalle fiamme
+    scelto = colpo(0, 16);
+    var meglio = margine(F, z, scelto, 20);
+    for (D = 0; D <= Math.max(0, Ec[1] - Gy0 - 120); D += D ? 30 : 60) {
+      for (H = 16; H < 1200; H += 24) {
+        var q = colpo(D, H);
+        if (!alto(q, 20) && scelto) break;
+        var v = margine(F, z, q, 20);
+        if (v > meglio + 0.5) { meglio = v; scelto = q; }
+      }
+    }
+  }
+  var st0 = scelto.stato;
+  // un colpo pulito resta una parabola vera; l'altro si scosta dalle fiamme, ma mai dentro il binario
+  if (!z.buono) scelto.stato = function (t) {
+    var s = st0(t);
+    if (s.paracadute === undefined) { var P = lontanoDalleFiamme(F, z, s.P, CL); if (!sottoIlBinario(F, z, P)) s.P = P; }
+    return s;
+  };
+  z.cannone = scelto; z.len = scelto.len;
+  z.punto = function (t) { return z.cannone.stato(t).P; };
+}
+/** Il volo p finisce sopra la piattaforma; da lì si scende in verticale fino all'anca d'arrivo Ec. */
+function conParacadute(p, Ec) {
+  var A = p.stato(1).P, ld = (Ec[1] - A[1]) * 2.2, tp = p.len / (p.len + ld);
+  return {
+    B: p.B, M: p.M, ang: p.ang, len: p.len + ld, A: A,
+    stato: function (t) {
+      if (t <= tp) return p.stato(t / tp);
+      var w = (t - tp) / (1 - tp);
+      return { P: [lerp(A[0], Ec[0], w), lerp(A[1], Ec[1], w)], rot: 2 * Math.PI, v: 1, paracadute: w };
     }
   };
 }
-function campioniSalto(p) {
+/** Il volo non tocca le fiamme: ogni punto del corpo (anca, piedi, testa) sta sopra il binario e ad almeno
+ *  18 px da ogni lingua di fuoco. Si misura sulle fiamme vere, non sul binario: così l'omino può
+ *  passare vicino a un binario ripido, dove le fiamme salgono in verticale e non verso di lui. */
+function sparoLibero(F, z, p, n) {
+  return campioniSalto(p, n).every(function (q) { return !sottoIlBinario(F, z, q) && distanzaFiamme(F, z, q, 18) >= 18; });
+}
+function sottoIlBinario(F, z, q) {
+  var c = curvaY(F, q[0]);
+  return isFinite(c) && q[0] > z.S[0] && q[0] < z.E[0] && q[1] > c - 4 && !vicinoPiattaforma(z, q[0], c);
+}
+/** Quanto il volo resta lontano dalle fiamme (negativo se passa sotto il binario). */
+function margine(F, z, p, n) {
+  var m = Infinity;
+  campioniSalto(p, n).forEach(function (q) { m = Math.min(m, sottoIlBinario(F, z, q) ? -100 : distanzaFiamme(F, z, q, 80)); });
+  return m;
+}
+/** La distanza dalla fiamma più vicina, fino a r: le fiamme sono in colonne ogni 3 px, si guardano solo le vicine. */
+function distanzaFiamme(F, z, q, r) {
+  if (!z.colonne) {
+    z.colonne = {};
+    fiammeZona(F, z).forEach(function (f) { var k = Math.round(f[0] / 3); (z.colonne[k] || (z.colonne[k] = [])).push(f); });
+  }
+  var k0 = Math.round(q[0] / 3), n = Math.ceil(r / 3) + 1, m = r;
+  for (var k = k0 - n; k <= k0 + n; k++) {
+    var col = z.colonne[k];
+    if (col) for (var i = 0; i < col.length; i++) m = Math.min(m, Math.hypot(col[i][0] - q[0], col[i][1] - q[1]));
+  }
+  return m;
+}
+/** Dalla bocca del cannone (perno B0, canna puntata lungo la partenza della parabola) all'anca d'arrivo Ec;
+ *  H è quanto la parabola sale sopra la corda. L'omino vola a testa avanti e alla fine si raddrizza. */
+function traiettoria(B0, Ec, H) {
+  var M = B0, ang = 0;
+  for (var k = 0; k < 3; k++) {                     // la bocca dipende dall'alzo e l'alzo dalla bocca
+    ang = Math.atan2(Ec[1] - M[1] - 4 * H, Ec[0] - M[0]);
+    M = [B0[0] + Math.cos(ang) * CANNA * OMINO, B0[1] + Math.sin(ang) * CANNA * OMINO];
+  }
+  function P(v) { return [lerp(M[0], Ec[0], v), lerp(M[1], Ec[1], v) - 4 * H * v * (1 - v)]; }
+  var len = 0, pr = M;
+  for (var i = 1; i <= 30; i++) { var q = P(i / 30); len += Math.hypot(q[0] - pr[0], q[1] - pr[1]); pr = q; }
+  return {
+    B: B0, M: M, ang: ang, len: len,
+    stato: function (t) {
+      var testa = Math.atan2(Ec[1] - M[1] - 4 * H * (1 - 2 * t), Ec[0] - M[0]) + Math.PI / 2;
+      var w = Math.max(0, (t - 0.78) / 0.22), e = w * w * (3 - 2 * w);
+      return { P: P(t), rot: lerp(testa, 2 * Math.PI, e), v: t };
+    }
+  };
+}
+function campioniSalto(p, n) {
   var h0 = 26 * OMINO, pts = [];
-  for (var i = 0; i <= 60; i++) {
-    var st = p.stato(i / 60), P = st.P, s = Math.sin(st.rot), c = Math.cos(st.rot);
+  n = n || 60;
+  for (var i = 0; i <= n; i++) {
+    var st = p.stato(i / n), P = st.P, s = Math.sin(st.rot), c = Math.cos(st.rot);
     pts.push(P, [P[0] - s * h0, P[1] + c * h0], [P[0] + s * h0, P[1] - c * h0]);   // anca, piedi e testa
   }
   return pts;
 }
 
-function attrezzoDi(s) { return s > 0 ? 'il rampino: concavità verso l’alto' : 'l’asta: concavità verso il basso'; }
+function attrezzoDi(s) { return s > 0 ? 'il rampino: concavità verso l’alto' : 'il cannone: concavità verso il basso'; }
 COSTRUTTORI.concavita = function (g, F) {
   var P = g.passi, Z = null;
   var cx = (visA() + visB()) / 2, cy = (oy - (Gy0 + Gy1) / 2) / sy;
   S.zoom = zoomBase();
   g.fissi = pianoConcavita(g).map(function (z) { return { a: z.a, xa: z.xa, xb: z.xb }; });
-  // la vista più vicina in cui si vede tutto e ogni ramo sta sopra il fondo del suo tratto;
-  // se non c'è, la più vicina in cui almeno si vede tutto
-  var zooms = [1, 0.9, 0.8, 0.7, 0.62, 0.55, 0.48, 0.42, 0.36, 0.31, 0.27, 0.23, 0.2], ripiego = null;
-  function vista(z) { return z === 1 ? zoomBase() : { z: z, x0: cx, y0: cy, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 }; }
-  var trovata = zooms.some(function (z) {
-    S.zoom = vista(z);
-    Z = pianoConcavita(g);
-    if (!inQuadro(puntiConcavita(Z))) return false;
-    if (ripiego === null) ripiego = z;
-    return Z.every(function (q) { return !q.storto; }) || z < (ripiego || 1) * 0.6;
-  });
-  if (!trovata && ripiego !== null) { S.zoom = vista(ripiego); Z = pianoConcavita(g); }
+  Z = vistaConcavita(g);
   g.piano = Z; g.att = null; g.lasciato = null; g.chiaveVista = chiaveVista();
   if (!Z.length) { P.push(Fai(fine), Di('W', 'Qui il binario esce dal quaderno: la concavità è nella tabella', true)); return; }
   g.W.x = Z[0].xa;
@@ -948,22 +1003,40 @@ COSTRUTTORI.concavita = function (g, F) {
       var pr = Z[i - 1], stessa = Math.hypot(pr.E[0] - z.S[0], pr.E[1] - z.S[1]) < 12, cambia = pr.s !== z.s;
       var asintoto = F.esclusi.some(function (e) { return e.x > pr.xb && e.x < z.xa; });
       if (asintoto) P.push(Di('W', 'Asintoto: il muro non si attraversa, prendo il portale. Di là ' + (cambia ? 'cambio attrezzo e prendo ' : 'tengo ') + attrezzoDi(z.s), true));
-      else if (cerca(F.flessi, pr.b)) P.push(Di('W', 'Flesso! La concavità cambia: lascio ' + (pr.s > 0 ? 'il rampino' : 'l’asta') + ' e prendo ' + attrezzoDi(z.s), true));
+      else if (cerca(F.flessi, pr.b)) P.push(Di('W', 'Flesso! La concavità cambia: lascio ' + (pr.s > 0 ? 'il rampino' : 'il cannone') + ' e prendo ' + attrezzoDi(z.s), true));
       if (!stessa) P.push(Traversata(pr, z, asintoto));
     }
     if (z.s > 0) P.push(Tween(0.9, function (g) { g.att = { fase: 'lancio', z: z, k: 0 }; }, function (g, u) { g.att.k = u; }));
-    else P.push(Tween(0.9, function (g) { g.att = { fase: 'rincorsa', z: z, k: 0 }; }, function (g, u) { g.att.k = u; }));
-    P.push(Tween(0.8 + z.len / 210, function (g) { g.att = { fase: z.s > 0 ? 'liana' : 'asta', z: z, t: 0 }; }, function (g, u) {
+    else P.push(Tween(1.1, function (g) { g.att = { fase: 'carica', z: z, k: 0 }; }, function (g, u) { g.att.k = u; }));
+    P.push(Tween(0.8 + z.len / 210, function (g) { g.att = { fase: z.s > 0 ? 'liana' : 'cannone', z: z, t: 0 }; }, function (g, u) {
       g.att.t = u;
       g.W.x = Math.max(z.xa, Math.min(z.xb, invX(z.punto(u)[0])));
     }));
     P.push(Fai(function (g) {
       if (z.s > 0 && !z.B) g.lasciato = { z: z, t0: GT };
-      g.att = { fase: 'fermo', z: z, lato: 'E' }; g.W.x = z.xb;
+      g.att = { fase: 'fermo', z: z, lato: 'E', t0: GT }; g.W.x = z.xb;
     }));
   });
   P.push(Fai(fine), Di('W', 'Fine corsa: ' + (F.appunti.concavita || 'la concavità è nella tabella'), true, 6));
 };
+/** La vista più vicina in cui si vede tutto e ogni ramo sta sopra il fondo del suo tratto;
+ *  se non c'è, la più vicina in cui almeno si vede tutto. Lascia la vista in S.zoom e rende il piano. */
+function vistaConcavita(g) {
+  var cx = (visA() + visB()) / 2, cy = (oy - (Gy0 + Gy1) / 2) / sy, Z = null, ripiego = null;
+  var zooms = [1, 0.92, 0.85, 0.78, 0.72, 0.66, 0.61, 0.56, 0.52, 0.48, 0.45, 0.42, 0.39, 0.36, 0.33, 0.3, 0.27, 0.23, 0.2];
+  function vista(z) { return z === 1 ? zoomBase() : { z: z, x0: cx, y0: cy, px: (Gx0 + Gx1) / 2, py: (Gy0 + Gy1) / 2 }; }
+  var trovata = zooms.some(function (z) {
+    S.zoom = vista(z);
+    Z = pianoConcavita(g);
+    if (!inQuadro(puntiConcavita(Z))) return false;
+    if (ripiego === null) ripiego = z;
+    // un cannone che non ha un colpo pulito fa allontanare la vista, ma non oltre 1,5 volte
+    var colpi = Z.every(function (q) { return q.buono !== false; }) || z < 0.7;
+    return (Z.every(function (q) { return !q.storto; }) && colpi) || z < (ripiego || 1) * 0.6;
+  });
+  if (!trovata && ripiego !== null) { S.zoom = vista(ripiego); Z = pianoConcavita(g); }
+  return Z;
+}
 /** Da una piattaforma alla successiva quando non coincidono (un asintoto, un tratto fuori dal quaderno). */
 function Traversata(da, a, conPortale) {
   return Tween(conPortale ? 2.2 : 1.1, function (g) { g.att = { fase: conPortale ? 'portale' : 'salto', da: da, a: a, u: 0, t0: CLOCK }; }, function (g, u) {
@@ -977,7 +1050,7 @@ function puntoSalto(a) {
 }
 /** La geometria è in pixel: se la finestra cambia misura, si ricalcola sugli stessi oggetti. */
 function chiaveVista() { var z = S.zoom; return [sx, sy, ox, oy, Gx0, Gx1, Gy0, Gy1, z.z, z.x0, z.y0, z.px, z.py].join(','); }
-/** Tutto quello che deve vedersi nel giro della concavità: piattaforme, omino, ramo, pavimento, salti. */
+/** Tutto quello che deve vedersi nel giro della concavità: piattaforme, omino, ramo, cannone, salti. */
 function puntiConcavita(Z) {
   var pts = [], h0 = 26 * OMINO;
   Z.forEach(function (z) {
@@ -986,10 +1059,11 @@ function puntiConcavita(Z) {
       pts.push([z.C[0] - 30, z.C[1] - 12], [z.C[0] + 30, z.C[1] - 12]);
       var mano = [z.S[0] + 9 * OMINO, z.S[1] - 47 * OMINO];
       pts.push([(mano[0] + z.C[0]) / 2, (mano[1] + z.C[1]) / 2 - 50]);
-    } else if (z.s < 0 && z.asta) {
-      var J = z.asta;
-      pts.push([J.Q[0] - 38, J.Q[1] + 12], [J.Q[0] + 38, J.Q[1] + 12], [z.S[0] + 9 * OMINO + 90, z.S[1] - 26 * OMINO - 30]);
-      campioniSalto(J).forEach(function (p) { pts.push(p); });
+    } else if (z.s < 0 && z.cannone) {
+      var K = z.cannone;
+      pts.push([K.B[0] - 24 * OMINO, K.B[1] - 12 * OMINO], K.M);
+      if (K.A) pts.push([K.A[0], K.A[1] - h0 - 80]);
+      campioniSalto(K).forEach(function (p) { pts.push(p); });
     }
   });
   return pts;
@@ -1015,10 +1089,38 @@ function ramo(c) {
   tratto([[c[0] - 30, c[1] + 3], [c[0], c[1] - 2], [c[0] + 30, c[1] + 4]], { col: VERDE_INK, lw: 2.6 });
   ellisse(c[0] - 20, c[1] - 6, 7, 3.5, { col: VERDE_INK, lw: 1.3 }); ellisse(c[0] + 19, c[1] - 5, 7, 3.5, { col: VERDE_INK, lw: 1.3 });
 }
-function pavimento(c) {
-  linea(c[0] - 38, c[1], c[0] + 38, c[1], { col: MATITA, lw: 2 });
-  tratteggio([[c[0] - 38, c[1]], [c[0] + 38, c[1]], [c[0] + 38, c[1] + 11], [c[0] - 38, c[1] + 11]], { col: MATITA, sp: 4, alpha: 0.55, ang: 0.8 });
-  tratto([[c[0] - 7, c[1] - 1], [c[0] - 3, c[1] + 6], [c[0] + 9, c[1] + 6], [c[0] + 13, c[1] - 1]], { col: MATITA, lw: 1.4, passo: 5 });
+/** Il cannone: affusto di legno, canna di ferro girata di ang attorno al perno B, una ruota davanti.
+ *  scala per farlo comparire, alpha per farlo sparire, rinculo per il colpo, miccia accesa prima di sparare. */
+function cannone(B, ang, o) {
+  o = o || {};
+  var sc = OMINO * def(o.scala, 1), al = Math.min(1, def(o.alpha, 1)), LEGNO = '#8a5a2b', FERRO = '#3f4350';
+  if (sc < 0.02 || al <= 0.01) return;
+  ctx.save(); ctx.translate(B[0], B[1]); ctx.scale(sc, sc);
+  seme(77);
+  var aff = [[-24, 13], [14, 13], [6, -1], [-14, -1]];
+  riempi(aff, '#c9a26b', al); tratto(aff, { chiuso: true, col: LEGNO, lw: 1.5, passo: 8, alpha: al });
+  ctx.save(); ctx.rotate(ang); ctx.translate(-(o.rinculo || 0) * 6, 0);
+  var canna = [[-16, -8.5], [CANNA - 3, -6.5], [CANNA - 3, 6.5], [-16, 8.5], [-20, 4], [-20, -4]];
+  riempi(canna, FERRO, al); tratto(canna, { chiuso: true, col: BLU, lw: 1.6, passo: 8, alpha: al });
+  ellisse(CANNA - 2, 0, 3, 8, { col: BLU, lw: 1.6, alpha: al, fisso: true });
+  tratto([[4, -7.5], [4, 7.5]], { col: '#9aa0ae', lw: 1.2, passo: 6, alpha: al });
+  tratto([[-20, 0], [-27, -6]], { col: MATITA, lw: 1.3, passo: 4, alpha: al });       // la miccia
+  if (o.miccia) stellina(-28, -7, 4 + 2 * Math.sin(CLOCK * 30), ROSSO);
+  ctx.restore();
+  riempi(cerchio(0, 4, 10), '#c9a26b', al);
+  ellisse(0, 4, 10, 10, { col: LEGNO, lw: 1.8, alpha: al, fisso: true });
+  for (var i = 0; i < 3; i++) { var a = i * Math.PI / 3; tratto([[-Math.cos(a) * 9, 4 - Math.sin(a) * 9], [Math.cos(a) * 9, 4 + Math.sin(a) * 9]], { col: LEGNO, lw: 1.1, passate: 1, alpha: al }); }
+  ctx.restore();
+}
+function cerchio(x, y, r) { var P = []; for (var i = 0; i < 16; i++) P.push([x + Math.cos(i * Math.PI / 8) * r, y + Math.sin(i * Math.PI / 8) * r]); return P; }
+/** Il colpo: una stella di fuoco alla bocca e sbuffi di fumo che si allargano e svaniscono. */
+function fumo(M, ang, u) {
+  var c = Math.cos(ang), s = Math.sin(ang);
+  if (u < 0.35) stellina(M[0] + c * 8, M[1] + s * 8, 16 * (1 - u), ROSSO);
+  [[6, -9], [14, 8], [2, 12], [-6, -12]].forEach(function (d, i) {
+    var r = (7 + i * 2) * (0.5 + 1.6 * u), cx = M[0] + c * (d[0] + 20 * u) - s * d[1], cy = M[1] + s * (d[0] + 20 * u) + c * d[1];
+    ellisse(cx, cy, r, r * 0.8, { col: MATITA, lw: 1.2, alpha: 0.8 * (1 - u) });
+  });
 }
 function appeso(p, rot) {
   ctx.save(); ctx.translate(p[0], p[1]); ctx.rotate(rot - Math.PI / 2); ctx.scale(OMINO, OMINO);
@@ -1076,7 +1178,7 @@ function scenaConcavita(g) {
   });
   visti.forEach(piattaforma);
   disegnaFiamme(g);
-  var a = g.att, LEGNO = '#8a5a2b', h0 = 26 * OMINO;
+  var a = g.att, h0 = 26 * OMINO;
   if (g.lasciato) {                                   // il rampino lasciato: la fune dondola e sparisce
     var L = g.lasciato, tz = GT - L.t0, al = Math.max(0, 1 - tz / 1.6);
     if (al <= 0) g.lasciato = null;
@@ -1089,7 +1191,11 @@ function scenaConcavita(g) {
   }
   if (!a) return;
   var z = a.z;
-  if (a.fase === 'fermo') { var pf = a.z[a.lato]; omino(pf[0], pf[1], { posa: 'fermo' }); return; }
+  if (a.fase === 'fermo') {
+    var pf = a.z[a.lato];
+    if (a.lato === 'E' && a.z.cannone && a.t0 !== undefined) cannone(a.z.cannone.B, a.z.cannone.ang, { alpha: 1 - (GT - a.t0) / 0.8 });   // il cannone svanisce
+    omino(pf[0], pf[1], { posa: 'fermo' }); return;
+  }
   if (a.fase === 'salto') { var ps = puntoSalto(a); omino(ps[0], ps[1], { posa: 'raccolto' }); return; }
   if (a.fase === 'portale') {
     var ap = Math.min(1, (CLOCK - a.t0) / 0.35), pin = a.da.E, pout = a.a.S;
@@ -1133,28 +1239,37 @@ function scenaConcavita(g) {
     appeso(H, an);
     return;
   }
-  var J = z.asta;
-  if (!J) { omino(z.S[0], z.S[1], { posa: 'fermo' }); return; }
-  pavimento(J.Q);
-  if (a.fase === 'rincorsa') {                        // la punta dell'asta scende fino al pavimento
-    omino(z.S[0], z.S[1], { posa: 'corsa', fase: CLOCK * 14 });
-    var m2 = [z.S[0] + 9 * OMINO, z.S[1] - 26 * OMINO], avanti = [m2[0] + 90, m2[1] - 30];
-    tratto([m2, [lerp(avanti[0], J.Q[0], a.k * a.k), lerp(avanti[1], J.Q[1], a.k * a.k)]], { col: LEGNO, lw: 3.2, passo: 20, amp: 0.4 });
+  var K = z.cannone;
+  if (!K) { omino(z.S[0], z.S[1], { posa: 'fermo' }); return; }
+  if (a.fase === 'carica') {                          // compare il cannone e l'omino si tuffa nella bocca
+    cannone(K.B, K.ang, { scala: Math.min(1, a.k / 0.25), miccia: a.k > 0.75 });
+    if (a.k < 0.72) {
+      var u = a.k / 0.72, Pm = [lerp(z.S[0], K.M[0], u), lerp(z.S[1], K.M[1], u) - 50 * Math.sin(Math.PI * u)];
+      omino(Pm[0], Pm[1], { posa: u < 0.25 ? 'fermo' : 'proiettile', scala: 1 - 0.8 * u * u, rot: (K.ang + Math.PI / 2) * u * u });
+    }
     return;
   }
-  var st = J.stato(a.t), P = st.P, Lp = J.L - 18 * OMINO;
-  if (st.conAsta) {                                    // l'asta resta lunga uguale: si gira attorno al pavimento
-    var dq = Math.hypot(J.Q[0] - P[0], J.Q[1] - P[1]) || 1;
-    var Hm = [P[0] + (J.Q[0] - P[0]) / dq * 18 * OMINO, P[1] + (J.Q[1] - P[1]) / dq * 18 * OMINO];
-    tratto([J.Q, Hm], { col: LEGNO, lw: 3.2, passo: 20, amp: 0.4 });
-  } else {                                             // lasciata nel punto più alto: cade in avanti e sparisce
-    var th = -Math.PI / 2 + Math.min(1, st.v * 1.8) * 1.25, al2 = Math.max(0, 1 - st.v * 1.4);
-    if (al2 > 0) tratto([J.Q, [J.Q[0] + Math.cos(th) * Lp, J.Q[1] + Math.sin(th) * Lp]], { col: LEGNO, lw: 3.2, passo: 20, amp: 0.4, alpha: 0.9 * al2 });
-  }
+  var st = K.stato(a.t), P = st.P;
+  cannone(K.B, K.ang, { rinculo: Math.max(0, 1 - a.t * 5), alpha: st.paracadute !== undefined ? 1 - st.paracadute * 1.5 : 1 });
+  if (a.t < 0.3) fumo(K.M, K.ang, a.t / 0.3);
+  if (st.paracadute !== undefined) { paracadute(P, Math.min(1, st.paracadute / 0.15)); omino(P[0], P[1] + h0, { posa: st.paracadute > 0.9 ? 'fermo' : 'proiettile' }); return; }
   ctx.save();
   ctx.translate(P[0], P[1]); ctx.rotate(st.rot);
-  omino(0, h0, { posa: st.conAsta ? 'fermo' : st.v > 0.85 ? 'fermo' : 'raccolto' });
+  omino(0, h0, { posa: st.v > 0.94 ? 'fermo' : st.v > 0.78 ? 'raccolto' : 'proiettile' });
   ctx.restore();
+}
+/** Il paracadute: una cupola a spicchi sopra l'omino (P è l'anca), con le corde alle mani alzate. */
+function paracadute(P, k) {
+  var cx = P[0], cy = P[1] - 26 * OMINO - 58, rx = 34 * k, ry = 22 * k, mani = [[P[0] - 3 * OMINO, P[1] - 52 * OMINO], [P[0] + 3 * OMINO, P[1] - 52 * OMINO]];
+  if (k < 0.05) return;
+  var cupola = [];
+  for (var i = 0; i <= 16; i++) { var a = Math.PI + i * Math.PI / 16; cupola.push([cx + Math.cos(a) * rx, cy + Math.sin(a) * ry]); }
+  seme(88);
+  riempi(cupola, '#fde2df', 0.95);
+  tratto(cupola.concat([cupola[0]]), { col: ROSSO, lw: 1.6, passo: 8 });
+  [-1, -0.33, 0.33, 1].forEach(function (f, i) {
+    tratto([[cx + f * rx, cy], mani[i < 2 ? 0 : 1]], { col: MATITA, lw: 0.9, passate: 1 });
+  });
 }
 /** Dove sta l'omino del giro della concavità: la testa (per il fumetto) e il rettangolo che lo contiene. */
 function ancoraConcavita(g) {
@@ -1165,12 +1280,12 @@ function ancoraConcavita(g) {
   if (a.fase === 'fermo') { var pf = a.z[a.lato]; pts = [pf, [pf[0], pf[1] - 2 * h0 - 8]]; }
   else if (a.fase === 'salto') { var p = puntoSalto(a); pts = [p, [p[0], p[1] - 2 * h0]]; }
   else if (a.fase === 'portale') { var pq = a.u < 0.5 ? a.da.E : a.a.S; pts = [pq, [pq[0], pq[1] - 2 * h0 - 8]]; }
-  else if (a.fase === 'lancio' || a.fase === 'rincorsa') pts = [a.z.S, [a.z.S[0], a.z.S[1] - 2 * h0 - 8]];
+  else if (a.fase === 'lancio' || a.fase === 'carica') pts = [a.z.S, [a.z.S[0], a.z.S[1] - 2 * h0 - 8]];
   else if (a.fase === 'liana') {
     var z = a.z, stl = z.stato(a.t);
     if (stl.an === null) pts = [stl.P, [stl.P[0], stl.P[1] - 2 * h0]];
     else pts = [[z.C[0] + Math.cos(stl.an) * z.Rh, z.C[1] + Math.sin(stl.an) * z.Rh], stl.P];
-  } else { var P = a.z.asta.stato(a.t).P; pts = [[P[0] - h0, P[1] - h0], [P[0] + h0, P[1] + h0]]; }
+  } else { var P = a.z.cannone.stato(a.t).P; pts = [[P[0] - h0, P[1] - h0], [P[0] + h0, P[1] + h0]]; }
   var x0 = Math.min(pts[0][0], pts[1][0]) - 20, x1 = Math.max(pts[0][0], pts[1][0]) + 20;
   var y0 = Math.min(pts[0][1], pts[1][1]) - 6, y1 = Math.max(pts[0][1], pts[1][1]) + 4;
   return [(x0 + x1) / 2, y0, [x0, y0, x1 - x0, y1 - y0]];

@@ -21,7 +21,7 @@ Il tratto di biro che trema (line boil) su tutto tranne il grafico, che resta fe
 
 ## Glossario
 "giro" (dominio, segno, limiti, derivata, concavità), "binario" (il grafico), "carrello", "omino",
-"piattaforma", "fiamme", "rampino", "asta", "lancia", "portale", "muro" (asintoto verticale).
+"piattaforma", "fiamme", "rampino", "cannone", "paracadute", "lancia", "portale", "muro" (asintoto verticale).
 Nell'app: "concavità verso l'alto / verso il basso" (mai "convessa/concava").
 
 ## Tono per momento
@@ -36,6 +36,10 @@ Giro finito: comandi spenti tranne "rifai il giro" e "pulisci la pagina".
 
 ## Default
 Si parte da x − 1, senza giro attivo, velocità normale, pausa ai punti notevoli accesa.
+
+## Schermo
+In orizzontale gli appunti stanno nella colonna a sinistra; in verticale in una fascia in alto, e il margine
+resta solo per i nomi delle righe della tabella. La funzione ha le stesse proporzioni nei due versi.
 
 ## Movimento
 Il tremolio si ferma con prefers-reduced-motion. I bottoni al passaggio si evidenziano, non si ingrandiscono.

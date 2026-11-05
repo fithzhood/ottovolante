@@ -27,6 +27,7 @@ function paginaPulita() {
 
 // ── Impaginazione, in unità: lo schermo è alto almeno 720 unità ──
 var W = 0, H = 0, DPR = 1, U = 1, VW = 1280, VH = 720;
+var VERT = false, NOTEH = 0;          // schermo in verticale: gli appunti stanno in una fascia in alto
 var NOTEW = 260, Gx0 = 0, Gx1 = 0, Gy0 = 0, Gy1 = 0, TAB0 = 0;
 var QUAD = 24, sx = 40, sy = 40, ox = 0, oy = 0;
 var RIGA0 = 34, RIGAH = 44;
@@ -36,13 +37,24 @@ function impagina() {
   DPR = Math.min(window.devicePixelRatio || 1, 1.5);
   tela.width = Math.round(W * DPR); tela.height = Math.round(H * DPR);
   tela.style.width = W + 'px'; tela.style.height = H + 'px';
-  U = Math.min(H / 720, W / 1060);
+  VERT = W < H;
+  U = VERT ? Math.min(W / 760, H / 1000) : Math.min(H / 720, W / 1060);
   VW = W / U; VH = H / U;
-  NOTEW = Math.max(220, Math.min(300, VW * 0.2));
   TAB0 = VH - (RIGA0 + 4 * RIGAH) - 12;
-  Gx0 = NOTEW + 28; Gx1 = VW - 20; Gy0 = 12; Gy1 = TAB0 - 10;
+  if (VERT) {                                   // il margine resta a sinistra solo per i nomi delle righe della tabella
+    NOTEW = 132; NOTEH = 186;
+    Gx0 = NOTEW + 22; Gy0 = NOTEH + 14;
+  } else {
+    NOTEW = Math.max(220, Math.min(300, VW * 0.2)); NOTEH = 0;
+    Gx0 = NOTEW + 28; Gy0 = 12;
+  }
+  Gx1 = VW - 20; Gy1 = TAB0 - 10;
   posaRiprendi();
   calcolaVista();
+  // la pagina ha cambiato forma (il tablet ha girato): la vista ingrandita si ricentra sul nuovo grafico,
+  // e nella concavità si ricerca la vista in cui si vede tutto
+  if (S.zoom.px !== undefined) { S.zoom.px = (Gx0 + Gx1) / 2; S.zoom.py = (Gy0 + Gy1) / 2; }
+  if (S.giro && S.giro.piano && S.giro.F) { vistaConcavita(S.giro); aggiornaPiano(S.giro); }
   preparaFondo();
   S.cartelli.forEach(function (c) { c.off = undefined; c.corre = false; });   // cambio di finestra: i cartelli non corrono, si spostano
 }
@@ -50,6 +62,10 @@ function calcolaVista() {
   var w = S.F.finestra;
   var qx = Math.max(1, Math.floor((Gx1 - Gx0) / (QUAD * (w[1] - w[0]))));
   var qy = Math.max(1, Math.floor((Gy1 - Gy0) / (QUAD * (w[3] - w[2]))));
+  if (VERT) {                                   // in verticale la funzione non si allunga: stesse proporzioni dell'orizzontale
+    var qxO = Math.max(1, Math.floor(792 / (QUAD * (w[1] - w[0])))), qyO = Math.max(1, Math.floor(478 / (QUAD * (w[3] - w[2]))));
+    qy = Math.max(1, Math.min(qy, Math.round(qx * qyO / qxO)));
+  }
   sx = QUAD * qx; sy = QUAD * qy;
   ox = Math.round(((Gx0 + Gx1) / 2 - (w[0] + w[1]) / 2 * sx) / QUAD) * QUAD;
   oy = Math.round(((Gy0 + Gy1) / 2 + (w[2] + w[3]) / 2 * sy) / QUAD) * QUAD;
@@ -98,7 +114,9 @@ function disegnaCartaVera() {
   for (var y = 0; y < VH; y += QUAD) { ctx.moveTo(0, y); ctx.lineTo(VW, y); }
   ctx.stroke();
   ctx.strokeStyle = 'rgba(214, 60, 70, 0.55)'; ctx.lineWidth = 1.1;
-  ctx.beginPath(); ctx.moveTo(NOTEW, 0); ctx.lineTo(NOTEW, VH); ctx.moveTo(NOTEW + 4, 0); ctx.lineTo(NOTEW + 4, VH); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(NOTEW, NOTEH); ctx.lineTo(NOTEW, VH); ctx.moveTo(NOTEW + 4, NOTEH); ctx.lineTo(NOTEW + 4, VH);
+  if (VERT) { ctx.moveTo(34, NOTEH); ctx.lineTo(VW, NOTEH); ctx.moveTo(34, NOTEH + 4); ctx.lineTo(VW, NOTEH + 4); }
+  ctx.stroke();
   for (y = 40; y < VH; y += 88) {
     ctx.fillStyle = '#3a2f26';
     ctx.beginPath(); ctx.arc(18, y, 6.5, 0, 7); ctx.fill();
@@ -286,8 +304,10 @@ function disegnaAppunti() {
   var righe = F.formula.split('\n'), dim = righe.length > 1 ? 21 : 30;
   y += righe.length > 1 ? 34 : 44;
   if (righe.length > 1) tratto([[x + 8, y - 26], [x + 2, y - 22], [x + 2, y + 6], [x - 4, y + 10], [x + 2, y + 14], [x + 2, y + 40], [x + 8, y + 46]], { lw: 1.6, passo: 6 });
+  var larghezzaFormula = 0;
   righe.forEach(function (r, i) {
     var lx = x + (righe.length > 1 ? 14 : 4);
+    larghezzaFormula = Math.max(larghezzaFormula, lx + larghezza(r, dim) + 6 - x);
     evidenzia([[lx - 4, y - dim * 0.35], [lx + larghezza(r, dim) + 6, y - dim * 0.38]], dim * 0.9, GIALLO);
     scrivi(r, lx, y, dim, BLU, -0.015);
     y += dim + 14;
@@ -298,6 +318,7 @@ function disegnaAppunti() {
     if (S.fatto[id] && F.appunti[id]) blocchi.push([NOMI[id], [F.appunti[id]]]);
   });
   if (S.limiti.length) blocchi.push(['limiti', S.limiti]);
+  if (VERT) { appuntiInFascia(blocchi, larghezzaFormula); scrivi('v' + VERSIONE, 30, VH - 10, 12, MATITA); return; }
   // gli appunti non devono mai invadere la tabella: si rimpicciolisce la grafia finché ci stanno
   var dims = [18, 16, 14, 12], d = dims[0];
   for (var i = 0; i < dims.length; i++) {
@@ -310,6 +331,31 @@ function disegnaAppunti() {
     y += 6;
   });
   scrivi('v' + VERSIONE, 30, VH - 10, 12, MATITA);
+}
+/** In verticale: i blocchi degli appunti scorrono in colonne accanto alla formula, dentro la fascia in alto. */
+function appuntiInFascia(blocchi, lf) {
+  var x0 = 46 + Math.max(150, lf) + 24, y0 = 34, y1 = NOTEH - 10, n = 2, gap = 18;
+  var cw = (VW - 20 - x0 - gap * (n - 1)) / n;
+  function posa(d, scrivendo) {
+    var col = 0, y = y0;
+    for (var i = 0; i < blocchi.length; i++) {
+      var b = blocchi[i], righe = [];
+      b[1].forEach(function (t) { righe = righe.concat(aCapo(t, d, cw - 6)); });
+      var h = d + 6 + righe.length * (d + 6);
+      if (y + h > y1 && y > y0) { col++; y = y0; }
+      if (col >= n) return false;
+      if (scrivendo) {
+        var x = x0 + col * (cw + gap);
+        scrivi(b[0] + ':', x, y, d - 1, ROSSO);
+        righe.forEach(function (r, j) { scrivi(r, x + 6, y + (j + 1) * (d + 6), d, BLU); });
+      }
+      y += h + 6;
+    }
+    return true;
+  }
+  var dims = [18, 16, 14, 12, 11], d = dims[dims.length - 1];
+  for (var i = 0; i < dims.length; i++) if (posa(dims[i], false)) { d = dims[i]; break; }
+  posa(d, true);
 }
 function altezzaAppunti(blocchi, d, w) {
   var h = 0;
