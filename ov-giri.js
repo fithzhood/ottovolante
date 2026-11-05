@@ -1121,9 +1121,10 @@ function scenaConcavita(g) {
       } else omino(stl.P[0], stl.P[1], { posa: 'fermo' });
       return;
     }
-    if (stl.an === null) {                            // salta verso la fune, che pende un po' molle
-      var pv = stl.P, mano = [pv[0] + 8, pv[1] - 44 * OMINO], mz = [(z.C[0] + mano[0]) / 2 + 10, Math.max(z.C[1], mano[1]) + 30];
-      tratto([z.C, mz, mano], { col: VERDE_INK, lw: 1.6, passo: 10 });
+    if (stl.an === null) {                            // la fune pende dal ramo, lunga sempre uguale, e gli va incontro
+      var pv = stl.P, p0 = z.stato(0).P, aS = angolo(z.C, [p0[0] + 8, p0[1] - 44 * OMINO]);
+      var e = stl.u * stl.u * (3 - 2 * stl.u), af = lerp(aS, z.a0, e) + Math.sin(stl.u * Math.PI * 2) * 0.12 * (1 - stl.u);
+      tratto([z.C, [z.C[0] + Math.cos(af) * z.Rh, z.C[1] + Math.sin(af) * z.Rh]], { col: VERDE_INK, lw: 1.8, passo: 10 });
       omino(pv[0], pv[1], { posa: stl.u > 0.7 ? 'lancia' : 'raccolto' });
       return;
     }
